@@ -16,7 +16,8 @@
 (function() {
     GM_log('STARTING!')
     const storage_key = 'jail_bail_estimator';
-    const settings = GM_getValue(storage_key, { min_bail: 0.0, max_bail: Number.MAX_VALUE})
+    const settings = GM_getValue(storage_key, { auto_scroll: true })
+    let scrolled = false
 
     function listMutationCallback(mutationList, observer) {
         mutationList.filter((mutation) => mutation.type === 'childList').forEach(handleListMutation)
@@ -50,6 +51,13 @@
             bustElement.style.position = 'relative'
             element.appendChild(estimateElement)
         })
+
+        if (settings.auto_scroll && !scrolled) {
+            scrolled = true
+            window.scrollTo({
+                top: document.body.scrollHeight,
+            });
+        }
     }
 
     function calculateEstimate(level, minutes, settings) {
@@ -57,11 +65,11 @@
         return 100.0 * level * minutes
     }
 
-    const timeRegex = /(\d+)h (\d+)m/
+    const timeRegex = /(?:(\d+)h )?(\d+)m/
     function timeToMinutes(timeString) {
         const match = timeString.match(timeRegex)
         if (match) {
-            const hours = parseInt(match[1], 10);
+            const hours = parseInt(match[1] || '0', 10);
             const minutes = parseInt(match[2], 10);
             return (hours * 60) + minutes;
         }
