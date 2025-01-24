@@ -41,15 +41,19 @@
             if (element.querySelector('.estimate')) {
                 return
             }
-            const bustElement = element.querySelector('.bust.t-gray-3')
+            const infoWrap = element.querySelector('.info-wrap')
             const estimateElement = document.createElement('span')
-            estimateElement.classList.add('estimate', 't-gray-3', 'bye')
+            estimateElement.classList.add('estimate')
             estimateElement.textContent = String(estimate)
             estimateElement.style.display = 'inline-block'
+            estimateElement.style.position = 'relative'
             estimateElement.style.textAlign = 'center'
             estimateElement.style.color = '#00cc00'
-            bustElement.style.position = 'relative'
-            element.appendChild(estimateElement)
+            estimateElement.style.fontSize = '18px'
+            estimateElement.style.marginLeft = '10px'
+            estimateElement.style.height = '30px'
+            estimateElement.style.width = '100px'
+            infoWrap.appendChild(estimateElement)
         })
 
         if (settings.auto_scroll && !scrolled) {
