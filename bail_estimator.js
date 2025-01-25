@@ -89,8 +89,9 @@
         let jailedList = document.querySelectorAll('.user-info-list-wrap > li')
         GM_log('JAILED LIST SIZE: ' + jailedList.length)
 
-        jailedList.forEach((element, index) => {'' +
-            const jailedId = element.querySelector('.user .name').getAttribute('href').split('=')[1]
+        jailedList.forEach((element, index) => {
+            const jailedId = element.querySelector('.user.name').getAttribute('href').split('=')[1]
+
             const timeElement = element.querySelector('.info-wrap .time')
             const timeString = timeElement ? timeElement.textContent.trim() : null
             const minutes = timeToMinutes(timeString).toFixed(0)
@@ -98,9 +99,9 @@
             const level = levelElement ? parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim()) : null
             const estimate = calculateEstimate(level, minutes)
 
-            if (element.querySelector('.estimate')) {
-                return
-            }
+            // Store for quick bail functionality
+            bailData[jailedId] = estimate
+
             const reasonElement = element.querySelector('.info-wrap .reason')
             if (!reasonElement.hasAttribute('estimate')) {
 
@@ -140,6 +141,20 @@
 
     function formatEstimate(estimate) {
         return dollarFormat.format(estimate)
+    }
+
+    function createUiElement() {
+        // TODO UI element
+        const element = document.createElement('div')
+        element.style.display = 'flex'
+        element.style.flexDirection = 'row'
+        element.style.flexWrap = 'wrap'
+        element.style.alignContent = 'normal'
+        element.style.justifyContent = 'space-evenly'
+        element.style.alignItems = 'normal'
+        element.style.width = '100%'
+        element.style.padding = '10px'
+        return element
     }
 
     // Observe the list
