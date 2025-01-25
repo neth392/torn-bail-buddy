@@ -15,9 +15,34 @@
 
 (function() {
     GM_log('STARTING!')
+
+    const defaultSettings = {
+        autoScroll: false,
+        minBailEstimate: 0.0,
+        maxBailEstimate: 100_000.0,
+        hasAdministrativeLaw: false,
+        hasUseOfForce: false,
+        hasBachelorLaw: false,
+    }
+
     const storage_key = 'jail_bail_estimator';
-    const settings = GM_getValue(storage_key, { auto_scroll: true })
+    const settings = loadSettings()
+
+    const dollarFormat = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+    });
+
     let scrolled = false
+
+    function loadSettings() {
+        return GM_getValue(storage_key, defaultSettings)
+    }
+
+    function updateSettings() {
+        GM_setValue(storage_key, settings)
+    }
 
     function listMutationCallback(mutationList, observer) {
         mutationList.filter((mutation) => mutation.type === 'childList').forEach(handleListMutation)
@@ -41,19 +66,15 @@
             if (element.querySelector('.estimate')) {
                 return
             }
-            const infoWrap = element.querySelector('.info-wrap')
-            const estimateElement = document.createElement('span')
-            estimateElement.classList.add('estimate')
-            estimateElement.textContent = String(estimate)
-            estimateElement.style.display = 'inline-block'
-            estimateElement.style.position = 'relative'
-            estimateElement.style.textAlign = 'center'
-            estimateElement.style.color = '#00cc00'
-            estimateElement.style.fontSize = '18px'
-            estimateElement.style.marginLeft = '10px'
-            estimateElement.style.height = '30px'
-            estimateElement.style.width = '100px'
-            infoWrap.appendChild(estimateElement)
+            const reasonElement = element.querySelector('.info-wrap .reason')
+            if (!reasonElement.hasAttribute('estimate')) {
+
+                reasonElement.innerHTML +=
+                    `<br><span style="color: #82c91e;">${formatEstimate(estimate)}</span>` +
+                    <span style="color: #82c91e;">${formatEstimate(estimate)}</span>
+
+                reasonElement.setAttribute('estimate', estimate)
+            }
         })
 
         if (settings.auto_scroll && !scrolled) {
@@ -78,6 +99,10 @@
             return (hours * 60) + minutes;
         }
         return -1
+    }
+
+    function formatEstimate(estimate) {
+        return dollarFormat.format(estimate)
     }
 
     function updateEstimateElement(estimateElement, estimate) {
