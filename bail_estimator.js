@@ -74,7 +74,7 @@
         return GM_getValue(storage_key, defaultSettings)
     }
 
-    function updateSettings() {
+    function saveSettings() {
         GM_setValue(storage_key, settings)
     }
 
@@ -83,32 +83,21 @@
     }
 
     function handleListMutation(mutation) {
-        // DEBUG - fix
-        GM_log('Mutation!')
+        // Select the list of jailed users
+        let jailedUserList = document.querySelectorAll('.user-info-list-wrap > li')
 
-        let jailedList = document.querySelectorAll('.user-info-list-wrap > li')
-        GM_log('JAILED LIST SIZE: ' + jailedList.length)
+        // Iterate the list of jailed users
+        jailedUserList.forEach((element, index) => {
 
-        jailedList.forEach((element, index) => {
-            const jailedId = element.querySelector('.user.name').getAttribute('href').split('=')[1]
-
-            const timeElement = element.querySelector('.info-wrap .time')
-            const timeString = timeElement ? timeElement.textContent.trim() : null
-            const minutes = timeToMinutes(timeString).toFixed(0)
-            const levelElement = element.querySelector('.info-wrap .level')
-            const level = levelElement ? parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim()) : null
-            const estimate = calculateEstimate(level, minutes)
+            const userData = extractUserData(element)
 
             // Store for quick bail functionality
-            bailData[jailedId] = estimate
+            bailData[userData.id] = userData
 
+            // Modify the reason element if not already done
             const reasonElement = element.querySelector('.info-wrap .reason')
             if (!reasonElement.hasAttribute('estimate')) {
-
-                // noinspection CssUnresolvedCustomProperty
-                reasonElement.innerHTML += `<br><span style="color: var(--default-green-color);">${formatEstimate(estimate)}</span>`
-
-                reasonElement.setAttribute('estimate', estimate)
+                modifyReasonElementWithEstimate(reasonElement, userData.estimate)
             }
         })
 
@@ -118,6 +107,29 @@
                 top: document.body.scrollHeight,
             });
         }
+    }
+
+    function extractUserData(element) {
+        const id = element.querySelector('.user.name').getAttribute('href').split('=')[1]
+
+        const timeElement = element.querySelector('.info-wrap .time')
+        const timeString = timeElement ? timeElement.textContent.trim() : null
+        const minutes = timeToMinutes(timeString).toFixed(0)
+        const levelElement = element.querySelector('.info-wrap .level')
+        const level = levelElement ? parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim()) : null
+        return {
+            id: id,
+            minutes: minutes,
+            level: level,
+            estimate: calculateEstimate(level, minutes),
+        }
+    }
+
+    function modifyReasonElementWithEstimate(reasonElement, estimate) {
+        // noinspection CssUnresolvedCustomProperty
+        reasonElement.innerHTML += `<br><span style="color: var(--default-green-color);">${formatEstimate(estimate)}</span>`
+
+        reasonElement.setAttribute('estimate', estimate)
     }
 
     function calculateEstimate(level, minutes) {
@@ -143,9 +155,10 @@
         return dollarFormat.format(estimate)
     }
 
-    function createUiElement() {
+    function createUIElement() {
         // TODO UI element
         const element = document.createElement('div')
+        element.id = 'jailBailEstimatorUI'
         element.style.display = 'flex'
         element.style.flexDirection = 'row'
         element.style.flexWrap = 'wrap'
@@ -154,8 +167,27 @@
         element.style.alignItems = 'normal'
         element.style.width = '100%'
         element.style.padding = '10px'
+        element.style.backgroundColor = 'var(--default-bg-panel-color)'
         return element
     }
+
+    function addUIElement(userListWrapperElement, uiElement) {
+        const tornToolsElement = document.getElementById('#jailFilter')
+        // If torn tools is installed add the UI element after that one
+        if (tornToolsElement != null) {
+            GM_log("torn tools found!")
+            tornToolsElement.insertAdjacentElement('afterend', uiElement)
+        }
+        // Otherwise add it as the first child element
+        else{
+            GM_log("torn tools not found!")
+            userListWrapperElement.insertBefore(uiElement, userListWrapperElement.firstChild)
+        }
+    }
+
+    // Handle the UI element
+    const uiElement = createUIElement()
+    addUIElement(document.querySelector('.userlist-wrapper'), uiElement)
 
     // Observe the list
     const listObserverConfig = { childList: true, subtree: true }
