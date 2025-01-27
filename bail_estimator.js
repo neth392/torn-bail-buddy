@@ -135,10 +135,13 @@
 
     function calculateEstimate(level, minutes) {
         let estimate = 100.0 * level * minutes
+
+        let discountMultiplier = 1.0
         for (const discountId in settings.discounts) {
-            estimate *= (1.0 - discounts[discountId].amount)
+            discountMultiplier *= 1.0 - discounts[discountId].amount
         }
-        return estimate
+
+        return estimate * discountMultiplier
     }
 
     const timeRegex = /(?:(\d+)h )?(\d+)m/
@@ -155,6 +158,19 @@
     function formatEstimate(estimate) {
         return dollarFormat.format(estimate)
     }
+
+    function isAPIKeyValid(apiKey) {
+        //TODO
+    }
+
+    function validateAPIKey(apiKey) {
+        if (!isAPIKeyValid(apiKey)){
+            //TODO api key not valid
+        }
+
+        // TODO
+    }
+
 
     function createUIElement() {
         // Create the main container
@@ -178,6 +194,23 @@
         toggleButton.style.backgroundOrigin = 'border-box'
         toggleButton.style.backgroundImage = 'var(--default-panel-gradient)'
 
+        // Hover effect
+        toggleButton.addEventListener('mouseover', () => {
+            toggleButton.style.backgroundImage = 'var(--default-panel-active-gradient)'
+        })
+
+        toggleButton.addEventListener('mouseout', () => {
+            toggleButton.style.backgroundImage = 'var(--default-panel-gradient)'
+        })
+
+        toggleButton.addEventListener('mousedown', () => {
+            toggleButton.style.backgroundImage = 'var(--default-panel-active-gradient)'
+        })
+
+        toggleButton.addEventListener('mouseup', () => {
+            toggleButton.style.backgroundImage = 'var(--default-panel-gradient)'
+        })
+
 
         // Create the content container
         const content = document.createElement('div')
@@ -187,6 +220,7 @@
         const updateContent = () => {
             content.style.display = settings.collapsed ? 'none' : 'block'
             toggleButton.textContent = settings.collapsed ? '► Bail Estimator' : '▼ Bail Estimator'
+            toggleButton.style.borderRadius = settings.collapsed ? '5px' : '5px 5px 0px 0px'
         }
 
         updateContent()
@@ -197,6 +231,7 @@
             saveSettings()
             updateContent()
         })
+
         container.appendChild(toggleButton)
 
         const divider = document.createElement('div')
@@ -217,61 +252,41 @@
         apiKeyLabel.textContent = 'API Key'
         apiKeyLabel.style.fontSize = '14px'
         apiKeyLabel.style.display = 'inline-block'
-        apiKeyLabel.style.marginRight = '10px'
         apiKeyContainer.appendChild(apiKeyLabel)
-
-        // Create the input field for the API key
-        const input = document.createElement('input')
-        input.type = 'text'
-        input.id = 'apiKeyInput'
-        input.placeholder = 'Enter your API key'
-        input.style.width = '25%'
-        input.style.padding = '2px'
-        input.style.backgroundColor = 'var(--input-background-color, #fff)'
-        input.style.border = '1px solid var(--input-border-color, #ccc)'
-        input.style.borderRadius = '4px'
-        input.style.display = 'inline-block'
-        input.style.marginRight = '10px'
-        apiKeyContainer.appendChild(input)
-
-        // Create the validate button
-        const validateButton = document.createElement('button')
-        validateButton.textContent = 'Validate'
-        validateButton.style.padding = '8px 12px'
-        validateButton.style.border = 'none'
-        validateButton.style.borderRadius = '4px'
-        validateButton.style.backgroundColor = '#007BFF'
-        validateButton.style.color = '#fff'
-        validateButton.style.cursor = 'pointer'
-        validateButton.style.display = 'inline-block'
-        apiKeyContainer.appendChild(validateButton)
 
         // Create the question mark icon
         const questionMark = document.createElement('span')
         questionMark.textContent = '?'
-        questionMark.style.marginLeft = '8px'
-        questionMark.style.padding = '5px'
+        questionMark.style.padding = '1px'
         questionMark.style.border = '1px solid var(--input-border-color, #ccc)'
         questionMark.style.borderRadius = '50%'
         questionMark.style.cursor = 'pointer'
         questionMark.style.display = 'inline-block'
         questionMark.style.textAlign = 'center'
-        questionMark.style.width = '20px'
-        questionMark.style.height = '20px'
+        questionMark.style.width = '14px'
+        questionMark.style.height = '14px'
+        questionMark.style.verticalAlign = 'middle'
+        questionMark.style.lineHeight = '14px'
+        questionMark.style.marginLeft = '4px'
         questionMark.style.backgroundColor = 'var(--input-background-color, #fff)'
 
         // Tooltip functionality
         const tooltip = document.createElement('div')
-        tooltip.textContent = 'Temporary hover text'
+        tooltip.textContent = 'Optionally use a limited access key to update the below fields, re-click validate to update them whenever.'
         tooltip.style.position = 'absolute'
-        tooltip.style.padding = '5px 10px'
+        tooltip.style.textWrap = 'balance'
+        tooltip.style.maxWidth = '25%'
         tooltip.style.borderRadius = '4px'
-        tooltip.style.backgroundColor = 'var(--default-bg-panel-color, #f9f9f9)'
-        tooltip.style.color = 'var(--default-color, #333)'
+        tooltip.style.padding = '5px'
+        tooltip.style.fontSize = '14px'
+        tooltip.style.backgroundColor = 'var(--default-bg-panel-color)'
+        tooltip.style.color = 'var(--default-color)'
         tooltip.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)'
         tooltip.style.display = 'none'
+        tooltip.style.boxSizing = 'border-box'
         tooltip.style.zIndex = '10'
 
+        // Hover effect
         questionMark.addEventListener('mouseover', () => {
             tooltip.style.display = 'block'
         })
@@ -287,6 +302,33 @@
         apiKeyContainer.appendChild(tooltip)
 
         content.appendChild(apiKeyContainer)
+
+        // Create the input field for the API key
+        const input = document.createElement('input')
+        input.type = 'text'
+        input.id = 'apiKeyInput'
+        input.placeholder = 'Enter your API key'
+        input.style.width = '25%'
+        input.style.padding = '2px'
+        input.style.backgroundColor = 'var(--input-background-color, #fff)'
+        input.style.border = '1px solid var(--input-border-color, #ccc)'
+        input.style.borderRadius = '2px'
+        input.style.display = 'inline-block'
+        input.style.marginLeft = '5px'
+        apiKeyContainer.appendChild(input)
+
+        // Create the validate button
+        const validateButton = document.createElement('button')
+        validateButton.textContent = 'Validate'
+        validateButton.style.padding = '2px'
+        validateButton.style.border = 'none'
+        validateButton.style.borderRadius = '4px'
+        validateButton.style.marginLeft = '5px'
+        validateButton.style.backgroundColor = 'var(--default-blue-color)'
+        validateButton.style.color = '#fff'
+        validateButton.style.cursor = 'pointer'
+        validateButton.style.display = 'inline-block'
+        apiKeyContainer.appendChild(validateButton)
 
         // Position the tooltip
         questionMark.addEventListener('mousemove', (e) => {
