@@ -49,6 +49,7 @@
     ]
 
     const defaultSettings = {
+        collapsed: false,
         autoScroll: false,
         quickBuy: false,
         minBailEstimate: 0.0,
@@ -59,14 +60,14 @@
 
     const bailData = {}
 
-    const storage_key = 'jail_bail_estimator';
+    const storage_key = 'jail_bail_estimator'
     const settings = loadSettings()
 
     const dollarFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
         maximumFractionDigits: 0,
-    });
+    })
 
     let scrolled = false
 
@@ -105,7 +106,7 @@
             scrolled = true
             window.scrollTo({
                 top: document.body.scrollHeight,
-            });
+            })
         }
     }
 
@@ -127,7 +128,7 @@
 
     function modifyReasonElementWithEstimate(reasonElement, estimate) {
         // noinspection CssUnresolvedCustomProperty
-        reasonElement.innerHTML += `<br><span style="color: var(--default-green-color);">${formatEstimate(estimate)}</span>`
+        reasonElement.innerHTML += `<br><span style='color: var(--default-green-color)'>${formatEstimate(estimate)}</span>`
 
         reasonElement.setAttribute('estimate', estimate)
     }
@@ -144,9 +145,9 @@
     function timeToMinutes(timeString) {
         const match = timeString.match(timeRegex)
         if (match) {
-            const hours = parseInt(match[1] || '0', 10);
-            const minutes = parseInt(match[2], 10);
-            return (hours * 60) + minutes;
+            const hours = parseInt(match[1] || '0', 10)
+            const minutes = parseInt(match[2], 10)
+            return (hours * 60) + minutes
         }
         return -1
     }
@@ -156,31 +157,159 @@
     }
 
     function createUIElement() {
-        // TODO UI element
-        const element = document.createElement('div')
-        element.id = 'jailBailEstimatorUI'
-        element.style.display = 'flex'
-        element.style.flexDirection = 'row'
-        element.style.flexWrap = 'wrap'
-        element.style.alignContent = 'normal'
-        element.style.justifyContent = 'space-evenly'
-        element.style.alignItems = 'normal'
-        element.style.width = '100%'
-        element.style.padding = '10px'
-        element.style.backgroundColor = 'var(--default-bg-panel-color)'
-        return element
+        // Create the main container
+        const container = document.createElement('div')
+        container.style.width = '100%'
+        container.style.color = 'var(--default-color, #333)'
+
+        // Create a collapsible toggle button
+        const toggleButton = document.createElement('button')
+        toggleButton.textContent = '▼ Bail Estimator'
+        toggleButton.style.display = 'block'
+        toggleButton.style.width = '100%'
+        toggleButton.style.borderRadius = '5px 5px 0px 0px'
+        toggleButton.style.padding = '5px 0px 5px 5px'
+        toggleButton.style.color = 'var(--tutorial-title-color)'
+        toggleButton.style.textShadow = 'var(--tutorial-title-shadow)'
+        toggleButton.style.cursor = 'pointer'
+        toggleButton.style.textAlign = 'left'
+        toggleButton.style.fontWeight = 'bold'
+        toggleButton.style.backgroundClip = 'border-box'
+        toggleButton.style.backgroundOrigin = 'border-box'
+        toggleButton.style.backgroundImage = 'var(--default-panel-gradient)'
+
+
+        // Create the content container
+        const content = document.createElement('div')
+        content.style.backgroundColor = 'var(--default-bg-panel-color)'
+        content.style.borderRadius = '0px 0px 5px 5px'
+
+        const updateContent = () => {
+            content.style.display = settings.collapsed ? 'none' : 'block'
+            toggleButton.textContent = settings.collapsed ? '► Bail Estimator' : '▼ Bail Estimator'
+        }
+
+        updateContent()
+
+        // Collapsible functionality
+        toggleButton.addEventListener('click', () => {
+            settings.collapsed = !settings.collapsed
+            saveSettings()
+            updateContent()
+        })
+        container.appendChild(toggleButton)
+
+        const divider = document.createElement('div')
+        divider.style.borderBottomStyle = 'solid'
+        divider.style.borderBottomWidth = '1px'
+        divider.style.borderBottomColor = 'var(--title-divider-bottom-color)'
+        divider.style.borderTopStyle = 'solid'
+        divider.style.borderTopWidth = '1px'
+        divider.style.borderTopColor = 'var(--title-divider-top-color)'
+        content.appendChild(divider)
+
+        const apiKeyContainer = document.createElement('div')
+        apiKeyContainer.style.padding = '5px 0px 5px 5px'
+
+        // Create the label for the API key field
+        const apiKeyLabel = document.createElement('apiKeyLabel')
+        apiKeyLabel.style.padding = '5px, '
+        apiKeyLabel.textContent = 'API Key'
+        apiKeyLabel.style.fontSize = '14px'
+        apiKeyLabel.style.display = 'inline-block'
+        apiKeyLabel.style.marginRight = '10px'
+        apiKeyContainer.appendChild(apiKeyLabel)
+
+        // Create the input field for the API key
+        const input = document.createElement('input')
+        input.type = 'text'
+        input.id = 'apiKeyInput'
+        input.placeholder = 'Enter your API key'
+        input.style.width = '25%'
+        input.style.padding = '2px'
+        input.style.backgroundColor = 'var(--input-background-color, #fff)'
+        input.style.border = '1px solid var(--input-border-color, #ccc)'
+        input.style.borderRadius = '4px'
+        input.style.display = 'inline-block'
+        input.style.marginRight = '10px'
+        apiKeyContainer.appendChild(input)
+
+        // Create the validate button
+        const validateButton = document.createElement('button')
+        validateButton.textContent = 'Validate'
+        validateButton.style.padding = '8px 12px'
+        validateButton.style.border = 'none'
+        validateButton.style.borderRadius = '4px'
+        validateButton.style.backgroundColor = '#007BFF'
+        validateButton.style.color = '#fff'
+        validateButton.style.cursor = 'pointer'
+        validateButton.style.display = 'inline-block'
+        apiKeyContainer.appendChild(validateButton)
+
+        // Create the question mark icon
+        const questionMark = document.createElement('span')
+        questionMark.textContent = '?'
+        questionMark.style.marginLeft = '8px'
+        questionMark.style.padding = '5px'
+        questionMark.style.border = '1px solid var(--input-border-color, #ccc)'
+        questionMark.style.borderRadius = '50%'
+        questionMark.style.cursor = 'pointer'
+        questionMark.style.display = 'inline-block'
+        questionMark.style.textAlign = 'center'
+        questionMark.style.width = '20px'
+        questionMark.style.height = '20px'
+        questionMark.style.backgroundColor = 'var(--input-background-color, #fff)'
+
+        // Tooltip functionality
+        const tooltip = document.createElement('div')
+        tooltip.textContent = 'Temporary hover text'
+        tooltip.style.position = 'absolute'
+        tooltip.style.padding = '5px 10px'
+        tooltip.style.borderRadius = '4px'
+        tooltip.style.backgroundColor = 'var(--default-bg-panel-color, #f9f9f9)'
+        tooltip.style.color = 'var(--default-color, #333)'
+        tooltip.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)'
+        tooltip.style.display = 'none'
+        tooltip.style.zIndex = '10'
+
+        questionMark.addEventListener('mouseover', () => {
+            tooltip.style.display = 'block'
+        })
+        questionMark.addEventListener('mouseout', () => {
+            tooltip.style.display = 'none'
+        })
+        questionMark.addEventListener('click', () => {
+            tooltip.style.display = tooltip.style.display === 'none' ? 'block' : 'none'
+        })
+
+        // Append the tooltip and question mark
+        apiKeyContainer.appendChild(questionMark)
+        apiKeyContainer.appendChild(tooltip)
+
+        content.appendChild(apiKeyContainer)
+
+        // Position the tooltip
+        questionMark.addEventListener('mousemove', (e) => {
+            tooltip.style.top = `${e.clientY + 15}px`
+            tooltip.style.left = `${e.clientX + 15}px`
+        })
+
+        // Append the content container to the main container
+        container.appendChild(content)
+
+        return container
     }
 
     function addUIElement(userListWrapperElement, uiElement) {
         const tornToolsElement = document.getElementById('#jailFilter')
         // If torn tools is installed add the UI element after that one
         if (tornToolsElement != null) {
-            GM_log("torn tools found!")
+            GM_log('torn tools found!')
             tornToolsElement.insertAdjacentElement('afterend', uiElement)
         }
         // Otherwise add it as the first child element
         else{
-            GM_log("torn tools not found!")
+            GM_log('torn tools not found!')
             userListWrapperElement.insertBefore(uiElement, userListWrapperElement.firstChild)
         }
     }
@@ -192,9 +321,9 @@
     // Observe the list
     const listObserverConfig = { childList: true, subtree: true }
     const listObserver = new MutationObserver(listMutationCallback)
-    const listNode = document.querySelector('.user-info-list-wrap');
+    const listNode = document.querySelector('.user-info-list-wrap')
     listObserver.observe(listNode, listObserverConfig)
 
     GM_log('ENDED!')
 
-})();
+})()
