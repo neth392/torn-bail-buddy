@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Jail Bail Estimator & Easy Bailer
+// @name         Bail Buddy
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  Displays a bail estimate and provides buttons to quickly bail someone out.
+// @description  A Torn.com Bail Buddy, filter, and bail-buy sniping tool
 // @author       neth [3564828]
 // @match        https://www.torn.com/jailview.php
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=torn.com
@@ -18,28 +18,108 @@
     // TODO remove
     GM_log('STARTING!')
 
+    const style = document.createElement('style')
+    style.type = 'text/css'
+
+
+    style.innerHTML = `
+        .bb-togglebar {
+        }
+        
+        .bb-container {
+          display: flex;  
+        }
+        
+        .bb-container-toggle {
+          width: 100%;
+          border-radius: 5px 5px 0px 0px;
+          color: var(--default-color);
+          font-weight: bold;
+          text-align: left;
+          padding: 5px;
+          cursor: pointer;
+          text-shadow: var(--tutorial-title-shadow);
+          background-clip: border-box;
+          background-origin: border-box;
+        }
+        
+        .bb-container-not-hovered {
+          background-image: var(--title-background-gradient);
+        }
+        
+        .bb-container-hovered {    
+          background-image: var(--btn-active-background);
+        }
+        
+        .bb-generic-text {
+          font-size: 12px;
+          color: var(--default-color);
+        }
+        
+        .bb-horizontal-divider {
+            bottom-border-width: 1px;
+            bottom-border-color: var(--title-divider-bottom-color);
+            top-border-style: solid;
+            top-border-width: 1px;
+            top-border-color: var(--title-divider-top-color);
+        }
+        
+        .bb-api-key-input {
+          width: 22%;
+          padding: 2px;
+          caret-color: var(--bbc-input-color);
+          color: var(--bbc-input-color);
+          background-color: var(--bbc-input-bg-color);
+          border: 1px solid var(--bbc-input-border-color);
+          border-radius: 2px;
+          margin-left: 5px; 
+        }
+        
+        .bb-validate-api-key-button {
+          padding: 2px;
+          border: none;
+          border-radius: 4px;
+          margin-left: 5px;
+          background-color: var(--default-blue-color);
+          color: var(--default-black-color);
+          cursor: pointer;
+        }
+        
+    `
+
+
+    document.head.appendChild(style)
+
+    const apiURL = 'https://api.torn.com/user/?selections=education,profile&key='
+
     const discounts = {
         'administrative-law': {
             displayName: 'Administrative Law',
             category: 'Education',
             amount: .05,
+            discountChecker: (response) => response.education_completed.includes(93),
         },
         'use-of-force': {
             displayName: 'Use Of Force In International Law',
             category: 'Education',
             amount: .1,
+            discountChecker: (response) => response.education_completed.includes(98),
         },
         'bachelor-law': {
             displayName: 'Bachelor Of Law',
             category: 'Education',
             amount: .5,
+            discountChecker: (response) => response.education_completed.includes(102),
         },
         'law-firm-job': {
             displayName: 'Law Firm Job',
             category: 'Job',
             amount: .5,
+            discountChecker: (response) => response.job.company_type === 2 ,
         },
     }
+
+    Object.freeze(discounts)
 
 
     const defaultSettings = {
@@ -47,17 +127,15 @@
         autoScroll: false,
         quickBuy: false,
         minBailEstimate: 0.0,
-        maxBailEstimate: 100_000.0,
+        maxBailEstimate: 0.0,
         apiKey: '',
+        showApiKey: true,
         discounts: {},
     }
 
-    const bailData = {}
+    Object.freeze(defaultSettings)
 
-    const storage_key = 'jail_bail_estimator'
-    const settings = loadSettings()
-
-    sanitizeSettings()
+    const timeRegex = /(?:(\d+)h )?(\d+)m/
 
     const dollarFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -65,14 +143,19 @@
         maximumFractionDigits: 0,
     })
 
-    let scrolled = false
+    const bailData = {}
+
+    const storageKey = 'jail_bail_estimator'
+    const settings = loadSettings()
+
+    sanitizeSettings()
 
     function loadSettings() {
-        return GM_getValue(storage_key, defaultSettings)
+        return GM_getValue(storageKey, defaultSettings)
     }
 
     function saveSettings() {
-        GM_setValue(storage_key, settings)
+        GM_setValue(storageKey, settings)
     }
 
     function sanitizeSettings() {
@@ -101,86 +184,107 @@
     }
 
     function handleListMutation(mutation) {
-        updateDisplayedBails(false)
+        updateAllDisplayedBails()
     }
 
     // TODO decide if forceUpdate is needed
-    function updateDisplayedBails(forceUpdate) {
+    function updateAllDisplayedBails() {
         // Select the list of jailed users
-        let jailedUserList = document.querySelectorAll('.user-info-list-wrap > li')
+        const jailedUserList = document.querySelectorAll('.user-info-list-wrap > li')
 
         // Iterate the list of jailed users
-        jailedUserList.forEach((element, index) => {
+        jailedUserList.forEach((bailElement, index) => updateDisplayedBail(bailElement))
+    }
 
-            // TODO is this needed?
-            const userData = extractUserData(element)
+    function updateDisplayedBail(bailElement) {
+        // TODO is this needed?
+        const userData = extractUserData(bailElement)
 
-            // Store for quick bail functionality
-            bailData[userData.id] = userData
+        // Store for quick bail functionality
+        bailData[userData.id] = userData
 
-            // Find the estimate element
-            let estimateElement = element.querySelector('.info-wrap .reason .estimate-span')
+        // Find the estimate element
+        let estimateElement = bailElement.querySelector('.info-wrap .reason .estimate-span')
 
-            // Create the reason element if not done
-            if (estimateElement == null) {
-                GM_log("NULL!")
-                estimateElement = createEstimateElement(userData.estimate)
-                const reasonElement = element.querySelector('.info-wrap .reason')
-                reasonElement.appendChild(document.createElement('br'))
-                reasonElement.appendChild(estimateElement)
-            }
-            // Otherwise update it
-            else if (forceUpdate) {
-                GM_log("UPDATE!")
-                // Update the estimate element
-                estimateElement.textContent = formatEstimate(userData.estimate)
-            }
-        })
-
-        if (settings.autoScroll && !scrolled) {
-            scrolled = true
-            window.scrollTo({
-                top: document.body.scrollHeight,
-            })
+        // Create the reason element if not done
+        if (estimateElement == null) {
+            estimateElement = createEstimateElement(userData.estimateString)
+            const reasonElement = bailElement.querySelector('.info-wrap .reason')
+            reasonElement.appendChild(document.createElement('br'))
+            reasonElement.appendChild(estimateElement)
+        }
+        // Otherwise update it if the text content doesn't match the estimate string
+        else if (estimateElement.textContent !== userData.estimateString) {
+            // Update the estimate element
+            estimateElement.textContent = userData.estimateString
         }
     }
 
+    // Extracts the userdata from the element
     function extractUserData(element) {
+        // User ID
         const id = element.querySelector('.user.name').getAttribute('href').split('=')[1]
 
+        // Time remaining in jail
         const timeElement = element.querySelector('.info-wrap .time')
         const timeString = timeElement ? timeElement.textContent.trim() : null
         const minutes = timeToMinutes(timeString).toFixed(0)
+
+        // User level
         const levelElement = element.querySelector('.info-wrap .level')
         const level = levelElement ? parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim()) : null
+
+        // Estimate & estimate string
+        const estimate = calculateEstimate(level, minutes)
+        const estimateString = formatEstimate(estimate)
+
         return {
             id: id,
             minutes: minutes,
             level: level,
-            estimate: calculateEstimate(level, minutes),
+            estimate: estimate,
+            estimateString: estimateString,
         }
     }
 
-    function createEstimateElement(estimate) {
+    // Constructs the estimate element with the estimateString displayed
+    function createEstimateElement(estimateString) {
         const estimateElement = document.createElement('span')
         estimateElement.classList.add('estimate-span')
         estimateElement.style.color = 'var(--default-green-color)'
-        estimateElement.textContent = formatEstimate(estimate)
+        estimateElement.textContent = estimateString
         return estimateElement
     }
 
+    // Calculates the estimate based on level & minutes, accounting for discounts in settings
     function calculateEstimate(level, minutes) {
         let estimate = 100.0 * level * minutes
 
         let discountMultiplier = 1.0
-        for (const discountId of settings.discounts) {
+        for (const discountId in settings.discounts) {
             discountMultiplier *= 1.0 - discounts[discountId].amount
         }
 
         return estimate * discountMultiplier
     }
 
-    const timeRegex = /(?:(\d+)h )?(\d+)m/
+
+    function setBailDiscount(discountId, hasDiscount, updateElement) {
+        if (hasDiscount) {
+            settings.discounts[discountId] = true
+            saveSettings()
+        }
+        else {
+            delete settings.discounts[discountId]
+            saveSettings()
+        }
+        if (updateElement) {
+            document.querySelector(`#discount-${discountId}`).checked = hasDiscount
+        }
+    }
+
+
+    // Converts time to minutes
     function timeToMinutes(timeString) {
         const match = timeString.match(timeRegex)
         if (match) {
@@ -191,24 +295,41 @@
         return -1
     }
 
+    // Formats the estimate into a US dollar format
     function formatEstimate(estimate) {
         return dollarFormat.format(estimate)
     }
 
-    function isAPIKeyValid(apiKey) {
-        //TODO
-    }
+    async function validateAPIKey(apiKey) {
+        try {
+            GM_log("API START")
+            const response = await fetch(apiURL + apiKey, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
 
-    function validateAPIKey(apiKey) {
-        if (!isAPIKeyValid(apiKey)){
-            //TODO api key not valid
+            const json =  await response.json()
+            if ("error" in json) {
+                return new Error(json.error.error)
+            }
+
+            for (const [discountId, discount] of Object.entries(discounts)) {
+                setBailDiscount(discountId, discount.discountChecker(json), true)
+                updateAllDisplayedBails()
+            }
+
+            return "OK"
         }
-
-        // TODO
+        catch (error) {
+            return error
+        }
     }
 
     // Create the main container
     const container = document.createElement('div')
+    container.classList.add('bb-container')
     container.style.width = '100%'
     container.style.color = 'var(--default-color, #333)'
     container.style.display = 'flex'
@@ -217,42 +338,29 @@
     container.style.alignItems = 'stretch'
 
     // Create a collapsible toggle button
-    const toggleButton = document.createElement('button')
-    toggleButton.textContent = '▼ Bail Estimator'
-    toggleButton.style.display = 'block'
-    toggleButton.style.width = '100%'
-    toggleButton.style.borderRadius = '5px 5px 0px 0px'
-    toggleButton.style.padding = '5px 0px 5px 5px'
-    toggleButton.style.color = 'var(--tutorial-title-color)'
-    toggleButton.style.textShadow = 'var(--tutorial-title-shadow)'
-    toggleButton.style.cursor = 'pointer'
-    toggleButton.style.textAlign = 'left'
-    toggleButton.style.fontWeight = 'bold'
-    toggleButton.style.backgroundClip = 'border-box'
-    toggleButton.style.backgroundOrigin = 'border-box'
-    toggleButton.style.backgroundImage = 'var(--title-black-gradient)'
-
-    const gradient = getComputedStyle(document.documentElement).getPropertyValue('--title-black-gradient').trim()
-    const reversedGradient = gradient.replace(/(\d+)deg/, (match, angle) => {
-        return `${(parseInt(angle, 10) + 180) % 360}deg`;
-    });
+    const containerToggle = document.createElement('button')
+    containerToggle.classList.add('bb-container-toggle', 'bb-container-not-hovered')
 
 
     // Hover effect
-    toggleButton.addEventListener('mouseover', () => {
-        toggleButton.style.backgroundImage = reversedGradient
+    containerToggle.addEventListener('mouseover', () => {
+        containerToggle.classList.add('bb-container-hovered')
+        containerToggle.classList.remove('bb-container-not-hovered')
     })
 
-    toggleButton.addEventListener('mouseout', () => {
-        toggleButton.style.backgroundImage = 'var(--title-black-gradient)'
+    containerToggle.addEventListener('mousedown', () => {
+        containerToggle.classList.add('bb-container-hovered')
+        containerToggle.classList.remove('bb-container-not-hovered')
     })
 
-    toggleButton.addEventListener('mousedown', () => {
-        toggleButton.style.backgroundImage = reversedGradient
+    containerToggle.addEventListener('mouseout', () => {
+        containerToggle.classList.add('bb-container-not-hovered')
+        containerToggle.classList.remove('bb-container-hovered')
     })
 
-    toggleButton.addEventListener('mouseup', () => {
-        toggleButton.style.backgroundImage = 'var(--title-black-gradient)'
+    containerToggle.addEventListener('mouseup', () => {
+        containerToggle.classList.add('bb-container-not-hovered')
+        containerToggle.classList.remove('bb-container-hovered')
     })
 
 
@@ -263,29 +371,24 @@
 
     const updateContent = () => {
         content.style.display = settings.collapsed ? 'none' : 'block'
-        toggleButton.textContent = settings.collapsed ? '► Bail Estimator' : '▼ Bail Estimator'
-        toggleButton.style.borderRadius = settings.collapsed ? '5px' : '5px 5px 0px 0px'
+        containerToggle.textContent = (settings.collapsed ? '► ' : '▼ ') + 'Bail Buddy'
+        containerToggle.style.borderRadius = settings.collapsed ? '5px' : '5px 5px 0px 0px'
     }
 
     updateContent()
 
     // Collapsible functionality
-    toggleButton.addEventListener('click', () => {
+    containerToggle.addEventListener('click', () => {
         settings.collapsed = !settings.collapsed
         saveSettings()
         updateContent()
     })
 
-    container.appendChild(toggleButton)
+    container.appendChild(containerToggle)
 
     // Divider (for looks)
     const divider = document.createElement('div')
-    divider.style.borderBottomStyle = 'solid'
-    divider.style.borderBottomWidth = '1px'
-    divider.style.borderBottomColor = 'var(--title-divider-bottom-color)'
-    divider.style.borderTopStyle = 'solid'
-    divider.style.borderTopWidth = '1px'
-    divider.style.borderTopColor = 'var(--title-divider-top-color)'
+    divider.classList.add('bb-horizontal-divider')
     content.appendChild(divider)
 
     // API Key container
@@ -300,7 +403,7 @@
     const apiKeyLabel = document.createElement('apiKeyLabel')
     apiKeyLabel.textContent = 'API Key'
     apiKeyLabel.style.fontSize = '14px'
-    apiKeyLabel.style.display = 'inline-block'
+    apiKeyLabel.style.textWrap = 'nowrap'
     apiKeyContainer.appendChild(apiKeyLabel)
 
     // Create the question mark icon
@@ -310,11 +413,9 @@
     questionMark.style.border = '1px solid var(--input-border-color, #ccc)'
     questionMark.style.borderRadius = '50%'
     questionMark.style.cursor = 'pointer'
-    questionMark.style.display = 'inline-block'
     questionMark.style.textAlign = 'center'
     questionMark.style.width = '14px'
     questionMark.style.height = '14px'
-    questionMark.style.verticalAlign = 'middle'
     questionMark.style.lineHeight = '14px'
     questionMark.style.marginLeft = '4px'
     questionMark.style.backgroundColor = 'var(--input-background-color, #fff)'
@@ -361,37 +462,41 @@
 
     // Create the input field for the API key
     const input = document.createElement('input')
-    input.type = 'text'
     input.id = 'apiKeyInput'
     input.value = settings.apiKey
     input.placeholder = 'Enter your API key'
-    input.style.width = '25%'
-    input.style.padding = '2px'
-    input.style.caretColor = 'var(--bbc-input-color)'
-    input.style.color = 'var(--bbc-input-color)'
-    input.style.backgroundColor = 'var(--bbc-input-bg-color)'
-    input.style.border = '1px solid var(--bbc-input-border-color)'
-    input.style.borderRadius = '2px'
-    input.style.display = 'inline-block'
-    input.style.marginLeft = '5px'
-    apiKeyContainer.appendChild(input)
+    input.classList.add('bb-api-key-input')
 
     input.addEventListener('input', () => {
         settings.apiKey = input.value
         saveSettings()
     })
 
+    // Toggle showing/hiding API key (for security purposes)
+    const hideInputToggle = document.createElement('button')
+    hideInputToggle.style.cursor = 'pointer'
+    hideInputToggle.style.fontSize = '16px'
+
+    const updateHideApiKeyToggle = () => {
+        hideInputToggle.innerHTML = settings.showApiKey ? '🙈' : '👁️'
+        input.type = settings.showApiKey ? 'text' : 'password'
+    }
+
+    updateHideApiKeyToggle()
+
+    hideInputToggle.addEventListener('click', () => {
+        settings.showApiKey = !settings.showApiKey
+        saveSettings()
+        updateHideApiKeyToggle()
+    })
+
+    apiKeyContainer.appendChild(input)
+    apiKeyContainer.appendChild(hideInputToggle)
+
     // Create the validate button
     const validateButton = document.createElement('button')
     validateButton.textContent = 'Validate'
-    validateButton.style.padding = '2px'
-    validateButton.style.border = 'none'
-    validateButton.style.borderRadius = '4px'
-    validateButton.style.marginLeft = '5px'
-    validateButton.style.backgroundColor = 'var(--default-blue-color)'
-    validateButton.style.color = 'var(--default-black-color)'
-    validateButton.style.cursor = 'pointer'
-    validateButton.style.display = 'inline-block'
+    validateButton.classList.add('bb-validate-api-key-button')
     apiKeyContainer.appendChild(validateButton)
 
     // Validate button response
@@ -405,25 +510,58 @@
     validateButton.addEventListener('mousedown', () => {
         validateButton.style.backgroundColor = 'var(--default-blue-hover-color)'
     })
-    validateButton.addEventListener('mouseup', () => {
+    validateButton.addEventListener('mouseup', async () => {
         validateButton.style.backgroundColor = 'var(--default-blue-color)'
+        validateButton.disabled = true
+        GM_log("PRESSED")
+        displayValidateResponseText('Validating...', 'var(--default-yellow-color)', 999_999)
         // Update the API
-        validateAPIKey(input.value)
+        const response = await validateAPIKey(input.value)
+        if (response === "OK") {
+            displayValidateResponseText('Bail Discounts Updated!', 'var(--default-green-color)')
+        }
+        else {
+            displayValidateResponseText('Error: ' + response.message, 'var(--default-red-color)')
+        }
+        validateButton.disabled = false
     })
+
+    let validateButtonTimeoutId = null
+
+    function displayValidateResponseText(text, color, displayTime = 5_000) {
+        clearValidateResponseText()
+        validateButtonResponse.textContent = text
+        validateButtonResponse.style.color = color
+        validateButtonTimeoutId = setTimeout(clearValidateResponseText, displayTime)
+    }
+
+    function clearValidateResponseText() {
+        if (validateButtonTimeoutId != null) {
+            clearTimeout(validateButtonTimeoutId)
+            validateButtonTimeoutId = null
+        }
+        validateButtonResponse.textContent = ''
+    }
+
 
     // Bail Discounts
     const bailDiscountsContainer = document.createElement('div')
+    bailDiscountsContainer.textContent = 'Bail Discounts'
+    bailDiscountsContainer.style.fontSize = '12px'
+    bailDiscountsContainer.style.fontWeight = 'bold'
     bailDiscountsContainer.style.display = 'flex'
-    bailDiscountsContainer.style.flexDirection = 'row'
-    bailDiscountsContainer.style.justifyContent = 'flex-start'
-    bailDiscountsContainer.style.alignItems = 'center'
+    bailDiscountsContainer.style.flexDirection = 'column'
+    bailDiscountsContainer.style.justifyContent = 'center'
+    bailDiscountsContainer.style.alignItems = 'flex-start'
+    bailDiscountsContainer.style.padding = '5px'
 
-    for (const discountId in discounts) {
+    for (const [discountId, discount] of Object.entries(discounts)) {
         const discountContainer = document.createElement('div')
         discountContainer.style.display = 'flex'
         discountContainer.style.flexDirection = 'row'
         discountContainer.style.justifyContent = 'flex-start'
         discountContainer.style.alignItems = 'center'
+        discountContainer.style.gap = '4px'
 
         const checkbox = document.createElement('input')
         checkbox.type = 'checkbox'
@@ -431,31 +569,30 @@
         checkbox.checked = discountId in settings.discounts
 
         checkbox.addEventListener('change', () => {
-            if (checkbox.checked) {
-                settings.discounts[discountId] = true
-                GM_log("ADD:" + discountId)
-            }
-            else {
-                delete settings.discounts[discountId]
-                GM_log("REMOVE:" + discountId)
-            }
+            setBailDiscount(discountId, checkbox.checked)
             saveSettings()
+            updateAllDisplayedBails()
             GM_log("SAVE")
         })
 
-        const discountLabel = document.createElement('label')
-        discountLabel.textContent = discounts[discountId].displayName
-
         discountContainer.appendChild(checkbox)
+
+        const discountLabel = document.createElement('label')
+        discountLabel.textContent = discount.displayName
+        discountLabel.style.color = 'var(--default-color)'
+        discountLabel.style.fontSize = '12px'
+        discountLabel.style.fontWeight = 'normal'
         discountContainer.appendChild(discountLabel)
+
         bailDiscountsContainer.appendChild(discountContainer)
 
     }
 
-    content.appendChild(bailDiscountsContainer)
-
     // Add the API Key container to content
     content.appendChild(apiKeyContainer)
+
+    // Add the bail discounts container
+    content.appendChild(bailDiscountsContainer)
 
     // Append the content container to the main container
     container.appendChild(content)
