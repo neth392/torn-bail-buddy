@@ -31,6 +31,19 @@
 
   style.innerHTML = `
   
+    .bb-toggle-menu-collapsed::before {
+      content: '► ';
+    }
+    
+    .bb-toggle-menu-expanded::before {
+      content: '▼ ';
+    }
+    
+    .bb-generic-text {
+      font-size: 12px;
+      color: var(--default-color);
+    }
+    
     .bb-root {
       width: 100%;
       display: flex;
@@ -83,11 +96,6 @@
     
     .bb-content-container-collapsed {
       display: none !important;
-    }
-    
-    .bb-generic-text {
-      font-size: 12px;
-      color: var(--default-color);
     }
     
     .bb-horizontal-divider {
@@ -180,12 +188,20 @@
       font-size: 14px;
     }
     
-    .bb-toggle-menu-collapsed::before {
-      content: '► ';
+    .bb-bail-discount-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 5px;
     }
     
-    .bb-toggle-menu-expanded::before {
-      content: '▼ ';
+    .bb-bail-discount-toggle-button {
+    
+    }
+    
+    .bb-bail-discount-element {
+    
     }
     
   `
@@ -225,7 +241,7 @@
 
 
   const defaultSettings = {
-    collapsed: false,
+    rootCollapsed: false,
     autoScroll: false,
     quickBuy: false,
     minBailEstimate: 0.0,
@@ -432,7 +448,7 @@
   // Updates the root toggle button's style
   function updateRootToggleButton() {
     const rootToggleButton = document.querySelector('.bb-root-toggle-button')
-    if (settings.collapsed) {
+    if (settings.rootCollapsed) {
       rootToggleButton.classList.remove('bb-root-toggle-button-expanded')
     }
     else {
@@ -444,28 +460,28 @@
 
   function updateRootToggleLabel() {
     const rootToggleLabel = document.querySelector('.bb-root-toggle-label')
-    rootToggleLabel.classList.add('bb-toggle-menu-' + (settings.collapsed ? 'collapsed' : 'expanded'))
-    rootToggleLabel.classList.remove('bb-toggle-menu-' + (!settings.collapsed ? 'collapsed' : 'expanded'))
+    rootToggleLabel.classList.add('bb-toggle-menu-' + (settings.rootCollapsed ? 'collapsed' : 'expanded'))
+    rootToggleLabel.classList.remove('bb-toggle-menu-' + (!settings.rootCollapsed ? 'collapsed' : 'expanded'))
   }
 
   updateRootToggleLabel()
 
   function updateContentContainer() {
     const contentContainer = document.querySelector('.bb-content-container')
-    if (settings.collapsed) {
+    if (settings.rootCollapsed) {
       contentContainer.classList.add('bb-content-container-collapsed')
     }
     else {
       contentContainer.classList.remove('bb-content-container-collapsed')
     }
-    contentContainer.style.display = settings.collapsed ? 'none' : 'block'
+    contentContainer.style.display = settings.rootCollapsed ? 'none' : 'block'
   }
 
   updateContentContainer()
 
   // Collapsible UI functionality
   document.querySelector('.bb-root-toggle-button').addEventListener('click', () => {
-    settings.collapsed = !settings.collapsed
+    settings.rootCollapsed = !settings.rootCollapsed
     updateRootToggleButton()
     updateRootToggleLabel()
     updateContentContainer()
@@ -573,21 +589,12 @@
         <button class="bb-api-key-validate-button">Validate</button>
         <span class="bb-api-key-validate-button-response" />
       </div>
-      
+      <div class="bb-bail-discount-container">
+        <button class="bb-bail-discount-toggle-button">Bail Discounts</button>
+      </div>
     </div>
   </div>
   `
-
-  // Bail Discounts
-  const bailDiscountsContainer = document.createElement('div')
-  bailDiscountsContainer.textContent = 'Bail Discounts'
-  bailDiscountsContainer.style.fontSize = '12px'
-  bailDiscountsContainer.style.fontWeight = 'bold'
-  bailDiscountsContainer.style.display = 'flex'
-  bailDiscountsContainer.style.flexDirection = 'column'
-  bailDiscountsContainer.style.justifyContent = 'center'
-  bailDiscountsContainer.style.alignItems = 'flex-start'
-  bailDiscountsContainer.style.padding = '5px'
 
   for (const [discountId, discount] of Object.entries(discounts)) {
     const discountContainer = document.createElement('div')
