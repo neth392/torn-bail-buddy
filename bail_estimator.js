@@ -18,37 +18,82 @@
     // TODO remove
     GM_log('STARTING!')
 
+    const scriptName = 'Bail Buddy'
+
     const style = document.createElement('style')
     style.type = 'text/css'
 
+    const titleBlackGradient = getComputedStyle(document.documentElement).getPropertyValue('--title-black-gradient').trim()
+    const titleBlackGradientReversed = titleBlackGradient.replace(/(\d+)deg/, (match, angle) => {
+        return `${(parseInt(angle, 10) + 180) % 360}deg`;
+    });
 
     style.innerHTML = `
-        .bb-togglebar {
-        }
         
         .bb-container {
           display: flex;  
         }
         
-        .bb-container-toggle {
+        .bb-root {
           width: 100%;
-          border-radius: 5px 5px 0px 0px;
-          color: var(--default-color);
-          font-weight: bold;
-          text-align: left;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: stretch;
+        }
+        
+        .bb-root-toggle-button {
+          width: 100%;
           padding: 5px;
           cursor: pointer;
-          text-shadow: var(--tutorial-title-shadow);
           background-clip: border-box;
           background-origin: border-box;
+          background-image: var(--title-black-gradient);
+          border-radius: 5px 5px 5px 5px;
+          display: flex;
+          flex-direction: row;
+          justify-content: flex-start';
+          align-items: 'center';
         }
         
-        .bb-container-not-hovered {
-          background-image: var(--title-background-gradient);
+        .bb-root-toggle-button-expanded {
+          border-radius: 5px 5px 0px 0px !important;
         }
         
-        .bb-container-hovered {    
-          background-image: var(--btn-active-background);
+        .bb-root-toggle-button:hover {    
+          background-image: ${titleBlackGradientReversed};
+        }
+        
+        .bb-root-toggle-label {
+          font-weight: bold;
+          text-align: left;
+          text-shadow: var(--tutorial-title-shadow);
+          color: var(--tutorial-title-color);
+        }
+        
+        .bb-root-toggle-label::after {
+          content: ' ${scriptName}';
+        }
+        
+        .bb-root-toggle-label-collapsed::before {
+          content: '►';
+        }
+        
+        .bb-root-toggle-label-expanded::before {
+          content: '▼';
+        }
+        
+        .bb-content-container {
+          background-color: var(--default-bg-panel-color);
+          border-radius: 0px 0px 5px 5px;
+          display: none;
+        }
+        
+        .bb-content-container-expanded {
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          align-items: stretch;
         }
         
         .bb-generic-text {
@@ -57,11 +102,12 @@
         }
         
         .bb-horizontal-divider {
-            bottom-border-width: 1px;
-            bottom-border-color: var(--title-divider-bottom-color);
-            top-border-style: solid;
-            top-border-width: 1px;
-            top-border-color: var(--title-divider-top-color);
+            border-bottom-style: solid;
+            border-bottom-width: 1px;
+            border-bottom-color: var(--title-divider-bottom-color);
+            border-top-style: solid;
+            border-top-width: 1px;
+            border-top-color: var(--title-divider-top-color);
         }
         
         .bb-api-key-input {
@@ -328,68 +374,70 @@
     }
 
     // Create the main container
-    const container = document.createElement('div')
-    container.classList.add('bb-container')
-    container.style.width = '100%'
-    container.style.color = 'var(--default-color, #333)'
-    container.style.display = 'flex'
-    container.style.flexDirection = 'column'
-    container.style.justifyContent = 'center'
-    container.style.alignItems = 'stretch'
+    const rootContainer = document.createElement('div')
+    rootContainer.classList.add('bb-root')
 
     // Create a collapsible toggle button
-    const containerToggle = document.createElement('button')
-    containerToggle.classList.add('bb-container-toggle', 'bb-container-not-hovered')
+    const rootToggleButton = document.createElement('button')
+    rootToggleButton.classList.add('bb-root-toggle-button')
 
-
-    // Hover effect
-    containerToggle.addEventListener('mouseover', () => {
-        containerToggle.classList.add('bb-container-hovered')
-        containerToggle.classList.remove('bb-container-not-hovered')
-    })
-
-    containerToggle.addEventListener('mousedown', () => {
-        containerToggle.classList.add('bb-container-hovered')
-        containerToggle.classList.remove('bb-container-not-hovered')
-    })
-
-    containerToggle.addEventListener('mouseout', () => {
-        containerToggle.classList.add('bb-container-not-hovered')
-        containerToggle.classList.remove('bb-container-hovered')
-    })
-
-    containerToggle.addEventListener('mouseup', () => {
-        containerToggle.classList.add('bb-container-not-hovered')
-        containerToggle.classList.remove('bb-container-hovered')
-    })
-
-
-    // Create the content container
-    const content = document.createElement('div')
-    content.style.backgroundColor = 'var(--default-bg-panel-color)'
-    content.style.borderRadius = '0px 0px 5px 5px'
-
-    const updateContent = () => {
-        content.style.display = settings.collapsed ? 'none' : 'block'
-        containerToggle.textContent = (settings.collapsed ? '► ' : '▼ ') + 'Bail Buddy'
-        containerToggle.style.borderRadius = settings.collapsed ? '5px' : '5px 5px 0px 0px'
+    // Updates the rootToggleButton's style
+    const updateRootToggleButton = () => {
+        if (settings.collapsed) {
+            rootToggleButton.classList.remove('bb-root-toggle-button-expanded')
+        }
+        else {
+            rootToggleButton.classList.add('bb-root-toggle-button-expanded')
+        }
     }
 
-    updateContent()
+    rootContainer.appendChild(rootToggleButton)
+
+    updateRootToggleButton()
+
+    // Label for the root toggle
+    const rootToggleLabel = document.createElement('span')
+    rootToggleLabel.classList.add('bb-root-toggle-label')
+    rootToggleButton.appendChild(rootToggleLabel)
+
+    const updateRootToggleLabel = () => {
+        rootToggleLabel.classList.add('bb-root-toggle-label-' + (settings.collapsed ? 'collapsed' : 'expanded'))
+        rootToggleLabel.classList.remove('bb-root-toggle-label-' + (!settings.collapsed ? 'collapsed' : 'expanded'))
+    }
+
+    updateRootToggleLabel()
+
+    // Create the content container
+    const contentContainer = document.createElement('div')
+    contentContainer.classList.add('bb-content-container')
+
+    const updateContentContainer = () => {
+        if (settings.collapsed) {
+            contentContainer.classList.remove('bb-content-container-expanded')
+        }
+        else {
+            contentContainer.classList.add('bb-content-container-expanded')
+        }
+        contentContainer.style.display = settings.collapsed ? 'none' : 'block'
+    }
+
+    updateContentContainer()
 
     // Collapsible functionality
-    containerToggle.addEventListener('click', () => {
+    rootToggleButton.addEventListener('click', () => {
         settings.collapsed = !settings.collapsed
+        updateRootToggleButton()
+        updateRootToggleLabel()
+        updateContentContainer()
         saveSettings()
-        updateContent()
     })
 
-    container.appendChild(containerToggle)
+    rootContainer.appendChild(rootToggleButton)
 
     // Divider (for looks)
     const divider = document.createElement('div')
     divider.classList.add('bb-horizontal-divider')
-    content.appendChild(divider)
+    contentContainer.appendChild(divider)
 
     // API Key container
     const apiKeyContainer = document.createElement('div')
@@ -589,17 +637,17 @@
     }
 
     // Add the API Key container to content
-    content.appendChild(apiKeyContainer)
+    contentContainer.appendChild(apiKeyContainer)
 
     // Add the bail discounts container
-    content.appendChild(bailDiscountsContainer)
+    contentContainer.appendChild(bailDiscountsContainer)
 
     // Append the content container to the main container
-    container.appendChild(content)
+    rootContainer.appendChild(contentContainer)
 
     // Add the container to the page
     const userListWrapperElement = document.querySelector('.userlist-wrapper')
-    userListWrapperElement.insertBefore(container, userListWrapperElement.firstChild)
+    userListWrapperElement.insertBefore(rootContainer, userListWrapperElement.firstChild)
 
     // Observe the list for changes
     const listObserverConfig = { childList: true, subtree: true }
