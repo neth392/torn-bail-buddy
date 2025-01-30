@@ -400,12 +400,12 @@
     })
   }
 
-
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
   const listObserver = new MutationObserver(listMutationCallback)
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
+
 
   /**
    * Loads and retrieves the settings from storage.
@@ -413,7 +413,7 @@
    * @return {Object} Returns the stored settings object, or the default settings if no stored settings are found.
    */
   function loadSettings() {
-    return GM_getValue(STORAGE_KEY, DEFAULT_SETTINGS)
+    return GM_getValue(STORAGE_KEY, {})
   }
 
   /**
@@ -456,19 +456,12 @@
    * and executing a handler function for each relevant mutation.
    *
    * @param {MutationRecord[]} mutationList - The list of mutation records to process.
-   * @param {MutationObserver} observer - The mutation observer instance that observed the mutations.
    */
-  function listMutationCallback(mutationList, observer) {
-    mutationList.filter((mutation) => mutation.type === 'childList').forEach(handleListMutation)
-  }
-
-  /**
-   * Processes the list mutation and updates the display accordingly.
-   *
-   * @param {MutationRecord[]} mutation - An array of mutation records representing changes to the list.
-   */
-  function handleListMutation(mutation) {
-    updateAllDisplayedBails()
+  function listMutationCallback(mutationList) {
+    if (mutationList.filter((mutation) => mutation.type === 'childList').length > 0) {
+      GM_log("Update displayed bails") // TODO remove
+      updateAllDisplayedBails()
+    }
   }
 
 
