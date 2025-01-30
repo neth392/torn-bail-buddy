@@ -458,10 +458,12 @@
    * @param {MutationRecord[]} mutationList - The list of mutation records to process.
    */
   function listMutationCallback(mutationList) {
-    if (mutationList.filter((mutation) => mutation.type === 'childList').length > 0) {
-      GM_log("Update displayed bails") // TODO remove
-      updateAllDisplayedBails()
-    }
+    mutationList
+      .filter(mutation => mutation.type === 'childList')
+      .flatMap(mutation => Array.from(mutation.addedNodes))
+      .filter(node => node instanceof Element && node.parentNode instanceof Element)
+      .filter(element => element.parentNode.classList.contains('user-info-list-wrap'))
+      .forEach(updateDisplayedBail);
   }
 
 
@@ -490,6 +492,7 @@
    */
   function updateDisplayedBail(bailElement) {
     const userData = extractUserData(bailElement)
+    GM_log('UPDATE: ' + userData.name)
 
     // Store in bail data for bail sniper functionality
     bailData[userData.id] = userData
@@ -524,7 +527,9 @@
    */
   function extractUserData(element) {
     // User ID
-    const id = element.querySelector('.user.name').getAttribute('href').split('=')[1]
+    const userNameElement = element.querySelector('.user.name')
+    const id = userNameElement.href.split('=')[1]
+    const name = userNameElement.title.split('[')[0].trim()
 
     // Time remaining in jail
     const timeElement = element.querySelector('.info-wrap .time')
@@ -541,6 +546,7 @@
 
     return {
       id: id,
+      name: name,
       minutes: minutes,
       level: level,
       estimate: estimate,
