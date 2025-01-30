@@ -592,20 +592,23 @@
    * @param {string} discountId - The unique identifier for the discount.
    * @param {boolean} hasDiscount - Indicates whether the discount is active (true) or inactive (false).
    * @param {boolean} updateElement - Determines whether the corresponding UI element should be updated.
-   * @return {void}
+   * @return {boolean} Returns true if settings was updated, false if not.
    */
   function setBailDiscount(discountId, hasDiscount, updateElement) {
+    if (hasDiscount === discountId in settings.discounts) {
+      return false
+    }
+
     if (hasDiscount) {
       settings.discounts[discountId] = true
-      saveSettings()
     }
     else {
       delete settings.discounts[discountId]
-      saveSettings()
     }
     if (updateElement) {
       document.querySelector(`#discount-${discountId}`).checked = hasDiscount
     }
+    return true
   }
 
   /**
@@ -658,10 +661,16 @@
         return new Error(json.error.error)
       }
 
+      let settingsModified = false
       for (const [discountId, discount] of Object.entries(DISCOUNTS)) {
-        setBailDiscount(discountId, discount.discountChecker(json), true)
+        settingsModified = setBailDiscount(discountId, discount.discountChecker(json), true) || settingsModified
       }
-      updateAllDisplayedBails()
+
+      if (settingsModified) {
+        GM_log("SETTINGS MODIFIED, UPDATING BAILS")
+        updateAllDisplayedBails()
+        saveSettings()
+      }
 
       return "OK"
     }
