@@ -103,6 +103,35 @@
       margin-right: 2px;
     }
     
+    .bb-flex-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: stretch;
+    }
+    
+    .bb-flex-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .bb-horizontal-divider {
+      border-bottom-style: solid;
+      border-bottom-width: 1px;
+      border-bottom-color: var(--title-divider-bottom-color);
+      border-top-style: solid;
+      border-top-width: 1px;
+      border-top-color: var(--title-divider-top-color);
+    }
+    
+    .bb-estimate-span {
+      color: var(--default-green-color);
+    }
+    
     .bb-root {
       width: 100%;
       display: flex;
@@ -154,27 +183,17 @@
       display: none !important;
     }
     
-    .bb-horizontal-divider {
-      border-bottom-style: solid;
-      border-bottom-width: 1px;
-      border-bottom-color: var(--title-divider-bottom-color);
-      border-top-style: solid;
-      border-top-width: 1px;
-      border-top-color: var(--title-divider-top-color);
-    }
-    
     .bb-api-key-container {
-      display: inline-flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      justify-content: flex-start;
-      align-items: center;
+      display: inline-flex !important;
+      padding-bottom: 4px;
       gap: 4px;
+      align-items: start !important;
     }
     
-    .bb-api-key-label {
+    .bb-settings-label {
       font-size: 14px;
       color: var(--default-color);
+      font-weight: bold;
     }
     
     .bb-api-key-tooltip-icon {
@@ -244,32 +263,20 @@
     }
     
     .bb-bail-discount-container {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: flex-start;
       gap: 4px;
-      padding-top: 4px;
-    }
-    
-    .bb-bail-discount-label {
-      font-size: 14px;
-      color: var(--default-color);
-      font-weight: bold;
     }
     
     .bb-bail-discount {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      justify-content: flex-start;
-      align-items: center;
       gap: 4px;
     }
     
-    .bb-estimate-span {
-      color: var(--default-green-color);
+    .bb-bail-filter-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start !important;
+      align-items: flex-start !important;
     }
+    
   `
   document.head.appendChild(style)
 
@@ -281,24 +288,26 @@
     </button>
     <div class="bb-horizontal-divider"></div>
     <div class="bb-content-container">
-      <div class="bb-top-settings">
-        <div class="bb-api-key-container">
-          <label class="bb-api-key-label">API Key</label>
-          <span class="bb-api-key-tooltip-icon">?</span>
-          <div class="bb-api-key-tooltip">
-            Optionally use a minimal access API key to update the below fields. The API Key is only stored in your browser 
-            and no requests are made to Torn's API without clicking the Validate button. Remember to click it after 
-            completing a bail-reducing education course or joining/leaving a Law Firm job.
-          </div>
-          <input class="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
-          <button class="bb-api-key-hide-input-button"></button>
-          <button class="bb-api-key-validate-button">Validate</button>
-          <span class="bb-api-key-validate-button-response"></span>
+      <div class="bb-flex-row bb-api-key-container">
+        <label class="bb-api-key-label">API Key</label>
+        <span class="bb-api-key-tooltip-icon">?</span>
+        <div class="bb-api-key-tooltip">
+          Optionally use a minimal access API key to update the below fields. The API Key is only stored in your browser 
+          and no requests are made to Torn's API without clicking the Validate button. Remember to click it after 
+          completing a bail-reducing education course or joining/leaving a Law Firm job.
         </div>
-        <div class="bb-bail-filter"></div>
+        <input class="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
+        <button class="bb-api-key-hide-input-button"></button>
+        <button class="bb-api-key-validate-button">Validate</button>
+        <span class="bb-api-key-validate-button-response"></span>
       </div>
-      <div class="bb-bail-discount-container">
-        <span class="bb-bail-discount-label">Bail Discounts</span>
+      <div class="bb-flex-row">
+        <div class="bb-bail-discount-container bb-flex-column">
+          <span class="bb-settings-label">Bail Discounts</span>
+        </div>
+        <div class="bb-bail-filter-container">
+          <span class="bb-settings-label">Bail Filter</span>
+        </div>
       </div>
     </div>
   </div>
@@ -374,7 +383,7 @@
   for (const [discountId, discount] of Object.entries(DISCOUNTS)) {
     const discountElement = document.createElement('div')
     discountElement.innerHTML = `
-    <div class="bb-bail-discount">
+    <div class="bb-bail-discount bb-flex-row">
         <input class="bb-checkbox" type="checkbox" id="discount-${discountId}"/>
         <label class="bb-generic-text" for="discount-${discountId}">${discount.displayName}</label>
     </div>
