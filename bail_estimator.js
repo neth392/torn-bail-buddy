@@ -2,7 +2,7 @@
 // @name     Bail Buddy
 // @namespace  http://tampermonkey.net/
 // @version    1.0
-// @description  A Torn.com Bail Buddy, filter, and bail-buy sniping tool
+// @description  A Torn.com bail estimator, filter, and bail-buy sniping tool
 // @author     neth [3564828]
 // @match    https://www.torn.com/jailview.php
 // @icon     https://www.google.com/s2/favicons?sz=64&domain=torn.com
@@ -52,7 +52,7 @@
     apiKey: '',
     showApiKey: true,
     discounts: Object.freeze({}),
-    bailFilter: Object.freeze({
+    bailFilter: Object.freeze({ //TODO implement filters
       enabled: false,
       hideNonMatches: false,
       'minBail': 0.0,
@@ -60,7 +60,7 @@
     }),
   })
 
-  const FILTERS = Object.freeze({
+  const FILTERS = Object.freeze({ // TODO implement filters
     minBail: Object.freeze({
       settingKey: 'minBail',
       displayName: 'Min Bail',
@@ -601,13 +601,14 @@
    * @param {Element} element - The DOM element containing the user information.
    * @return {Object} An object containing the extracted user data, including:
    *                  - `id` (string): The user's unique identifier.
+   *                  - `name` (string): The user's name.
    *                  - `minutes` (number): The time remaining in jail, converted to minutes.
    *                  - `level` (number): The user's level as a numerical value.
    *                  - `estimate` (number): The calculated estimate based on level and remaining time.
    *                  - `estimateString` (string): The formatted estimate value.
    */
   function extractUserData(element) {
-    // User ID
+    // User ID & name
     const userNameElement = element.querySelector('.user.name')
     const id = userNameElement.href.split('=')[1]
     const name = userNameElement.title.split('[')[0].trim()
