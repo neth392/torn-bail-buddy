@@ -55,6 +55,11 @@
     apiKey: '',
     showApiKey: true,
     discounts: Object.freeze({}),
+    bailFilter: Object.freeze({
+      enabled: false,
+      min: 0.0,
+      max: 0.0,
+    }),
   })
 
   const TIME_REGEX = /(?:(\d+)h )?(\d+)m/
@@ -98,6 +103,12 @@
       color: var(--default-color);
     }
     
+    .bb-settings-label {
+      font-size: 14px;
+      color: var(--default-color);
+      font-weight: bold;
+    }
+    
     .bb-checkbox {
       border-radius: 2px;
       margin-right: 2px;
@@ -126,6 +137,51 @@
       border-top-style: solid;
       border-top-width: 1px;
       border-top-color: var(--title-divider-top-color);
+    }
+    
+    .bb-vertical-divider {
+      border-right-style: solid;
+      border-right-width: 1px;
+      border-right-color: var(--title-divider-bottom-color);
+      border-left-style: solid;
+      border-left-width: 1px;
+      border-left-color: var(--title-divider-top-color);
+    }
+    
+    .bb-tooltip-trigger {
+      padding: 1px;
+      border: 1px solid var(--default-color);
+      background-color: var(--default-color);
+      color: var(--default-bg-panel-color);
+      border-radius: 50%;
+      cursor: pointer;
+      text-align: center;
+      width: 10px;
+      height: 10px;
+      line-height: 10px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    
+    .bb-tooltip-trigger::before {
+      content: '?';
+    }
+    
+    .bb-tooltip-popup {
+      position: absolute;
+      text-wrap: balance;
+      max-width: 20%;
+      border-radius: 4px;
+      padding: 5px;
+      font-size: 14px;
+      border-color: var(--tooltip-border-color);
+      background-color: var(--tooltip-bg-color);
+      color: var(--default-color);
+      box-shadow: var(--tooltip-shadow);
+      box-sizing: border-box;
+      z-index: 10;
+      display: none;
     }
     
     .bb-estimate-span {
@@ -177,6 +233,7 @@
       justify-content: flex-start;
       align-items: stretch;
       padding: 5px;
+      gap: 5px;
     }
     
     .bb-content-container-collapsed {
@@ -187,41 +244,6 @@
       display: inline-flex !important;
       padding-bottom: 4px;
       gap: 4px;
-      align-items: start !important;
-    }
-    
-    .bb-settings-label {
-      font-size: 14px;
-      color: var(--default-color);
-      font-weight: bold;
-    }
-    
-    .bb-api-key-tooltip-icon {
-      padding: 1px;
-      border: 1px solid var(--input-border-color);
-      border-radius: 50%;
-      cursor: pointer;
-      text-align: center;
-      width: 14px;
-      height: 14px;
-      line-height: 14px;
-      background-color: var(--input-background-color);
-    }
-    
-    .bb-api-key-tooltip {
-      position: absolute;
-      text-wrap: balance;
-      max-width: 25%;
-      border-radius: 4px;
-      padding: 5px;
-      font-size: 14px;
-      border-color: var(--tooltip-border-color);
-      background-color: var(--tooltip-bg-color);
-      color: var(--default-color);
-      box-shadow: var(--tooltip-shadow);
-      box-sizing: border-box;
-      z-index: 10;
-      display: none;
     }
     
     .bb-api-key-input {
@@ -270,11 +292,16 @@
       gap: 4px;
     }
     
+    .bb-settings-container {
+      align-items: stretch !important;
+      gap: 12px;
+    }
+    
     .bb-bail-filter-container {
       display: flex;
       flex-direction: column;
-      justify-content: flex-start !important;
-      align-items: flex-start !important;
+      justify-content: flex-start;
+      height: auto;
     }
     
   `
@@ -289,9 +316,9 @@
     <div class="bb-horizontal-divider"></div>
     <div class="bb-content-container">
       <div class="bb-flex-row bb-api-key-container">
-        <label class="bb-api-key-label">API Key</label>
-        <span class="bb-api-key-tooltip-icon">?</span>
-        <div class="bb-api-key-tooltip">
+        <label class="bb-settings-label">API Key</label>
+        <span class="bb-tooltip-trigger" data-tooltip-id="api-key"></span>
+        <div class="bb-tooltip-popup" data-tooltip-id="api-key">
           Optionally use a minimal access API key to update the below fields. The API Key is only stored in your browser 
           and no requests are made to Torn's API without clicking the Validate button. Remember to click it after 
           completing a bail-reducing education course or joining/leaving a Law Firm job.
@@ -301,10 +328,18 @@
         <button class="bb-api-key-validate-button">Validate</button>
         <span class="bb-api-key-validate-button-response"></span>
       </div>
-      <div class="bb-flex-row">
+      <div class="bb-flex-row bb-settings-container">
         <div class="bb-bail-discount-container bb-flex-column">
-          <span class="bb-settings-label">Bail Discounts</span>
+          <div class="bb-flex-row">
+            <span class="bb-settings-label">Bail Discounts</span>
+            <span class="bb-tooltip-trigger" data-tooltip-id="bail-discounts"></span>
+            <div class="bb-tooltip-popup" data-tooltip-id="bail-discounts">
+              The discount perks you have (or don't have) which are used in the bail estimate calculation. It is very
+              important to make sure these are accurate. Use the above API Key field to help out!
+            </div>
+          </div>
         </div>
+        <div class="bb-vertical-divider"></div>
         <div class="bb-bail-filter-container">
           <span class="bb-settings-label">Bail Filter</span>
         </div>
@@ -328,23 +363,28 @@
     saveSettings()
   })
 
-  // Hovering/clicking of tooltip icon
-  const apiKeyTooltipIcon = document.querySelector('.bb-api-key-tooltip-icon')
-  const apiKeyTooltip = document.querySelector('.bb-api-key-tooltip')
-  apiKeyTooltipIcon.addEventListener('mouseover', () => {
-    apiKeyTooltip.style.display = 'block'
-  })
-  apiKeyTooltipIcon.addEventListener('mouseout', () => {
-    apiKeyTooltip.style.display = 'none'
-  })
-  apiKeyTooltipIcon.addEventListener('click', () => {
-    apiKeyTooltip.style.display = apiKeyTooltip.style.display === 'none' ? 'block' : 'none'
-  })
+  // Functionality for all tooltips
+  document.querySelectorAll('.bb-tooltip-trigger').forEach((tooltipTrigger) => {
+    const tooltipId = tooltipTrigger.dataset.tooltipId
+    const getTooltipPopup = () => document.querySelector(`.bb-tooltip-popup[data-tooltip-id="${tooltipId}"]`)
 
-  // Tooltip positioning
-  apiKeyTooltipIcon.addEventListener('mousemove', (event) => {
-    apiKeyTooltip.style.top = `${event.clientY + 15}px`
-    apiKeyTooltip.style.left = `${event.clientX + 15}px`
+    // Show tooltip popup on hovering/clicking of tooltip trigger
+    tooltipTrigger.addEventListener('mouseover', () => {
+      getTooltipPopup().style.display = 'block'
+    })
+    tooltipTrigger.addEventListener('mouseout', () => {
+      getTooltipPopup().style.display = 'none'
+    })
+    tooltipTrigger.addEventListener('click', () => {
+      getTooltipPopup().style.display = apiKeyTooltip.style.display === 'none' ? 'block' : 'none'
+    })
+
+    // Tooltip positioning
+    tooltipTrigger.addEventListener('mousemove', (event) => {
+      const tooltipPopup = getTooltipPopup()
+      tooltipPopup.style.top = `${event.clientY + 15}px`
+      tooltipPopup.style.left = `${event.clientX + 15}px`
+    })
   })
 
   // API Key input handling
@@ -373,7 +413,7 @@
       displayValidateResponseText('Bail Discounts Updated!', 'var(--default-green-color)')
     }
     else {
-      displayValidateResponseText('Error: ' + response.message, 'var(--default-red-color)')
+      displayValidateResponseText(`Error: ${response.message}`, 'var(--default-red-color)')
     }
     apiKeyValidateButton.disabled = false
   })
@@ -748,7 +788,7 @@
    */
   function updateApiKeyInputVisibility() {
     document.querySelector('.bb-api-key-input').type = settings.showApiKey ? 'text' : 'password'
-    document.querySelector('.bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙈' : '👁️'
+    document.querySelector('.bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙉' : '🙈'
   }
 
 })()
