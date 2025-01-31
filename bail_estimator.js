@@ -27,7 +27,7 @@
       discountChecker: (response) => response.education_completed.includes(93),
     }),
     'use-of-force': Object.freeze({
-      displayName: 'Use Of Force In International Law',
+      displayName: 'Use Of Force In Int\'l Law',
       category: 'Education',
       amount: .1,
       discountChecker: (response) => response.education_completed.includes(98),
@@ -49,17 +49,36 @@
   const DEFAULT_SETTINGS = Object.freeze({
     rootCollapsed: false,
     autoScroll: false,
-    quickBuy: false,
-    minBailEstimate: 0.0,
-    maxBailEstimate: 0.0,
     apiKey: '',
     showApiKey: true,
     discounts: Object.freeze({}),
     bailFilter: Object.freeze({
       enabled: false,
-      min: 0.0,
-      max: 0.0,
+      hideNonMatches: false,
+      'minBail': 0.0,
+      'maxBail': 0.0,
     }),
+  })
+
+  const FILTERS = Object.freeze({
+    minBail: Object.freeze({
+      settingKey: 'minBail',
+      displayName: 'Min Bail',
+      valueType: 'number',
+      htmlAttributes: Object.freeze({
+        type: 'number',
+        min: '0',
+      }),
+    }),
+    maxBail: Object.freeze({
+      settingKey: 'maxBail',
+      displayName: 'Max Bail',
+      inputType: 'text',
+      htmlAttributes: Object.freeze({
+        type: 'number',
+        min: '0',
+      }),
+    })
   })
 
   const TIME_REGEX = /(?:(\d+)h )?(\d+)m/
@@ -101,6 +120,12 @@
     .bb-generic-text {
       font-size: 12px;
       color: var(--default-color);
+    }
+    
+    .bb-italic-text {
+      font-size: 12px;
+      color: #999;
+      font-style: italic;
     }
     
     .bb-settings-label {
@@ -170,8 +195,8 @@
     
     .bb-tooltip-popup {
       position: absolute;
-      text-wrap: balance;
-      max-width: 20%;
+      text-wrap: pretty;
+      max-width: 25%;
       border-radius: 4px;
       padding: 5px;
       font-size: 14px;
@@ -304,6 +329,19 @@
       height: auto;
     }
     
+    @media (max-width: 768px) {
+      .bb-tooltip-popup {
+        max-width: 50%;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .bb-tooltip-popup {
+        max-width: 70%;
+      }
+    }
+
+    
   `
   document.head.appendChild(style)
 
@@ -321,7 +359,7 @@
         <div class="bb-tooltip-popup" data-tooltip-id="api-key">
           Optionally use a minimal access API key to update the below fields. The API Key is only stored in your browser 
           and no requests are made to Torn's API without clicking the Validate button. Remember to click it after 
-          completing a bail-reducing education course or joining/leaving a Law Firm job.
+          completing a bail reducing education course or joining/leaving a Law Firm job.
         </div>
         <input class="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
         <button class="bb-api-key-hide-input-button"></button>
@@ -425,7 +463,10 @@
     discountElement.innerHTML = `
     <div class="bb-bail-discount bb-flex-row">
         <input class="bb-checkbox" type="checkbox" id="discount-${discountId}"/>
-        <label class="bb-generic-text" for="discount-${discountId}">${discount.displayName}</label>
+        <label for="discount-${discountId}">
+          <span class="bb-italic-text">(${(discount.amount * 100).toFixed(0).padStart(2, '0')}%)</span>
+          <span class="bb-generic-text">${discount.displayName}</span>
+        </label>
     </div>
     `
     discountContainer.appendChild(discountElement)
