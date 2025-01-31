@@ -52,32 +52,32 @@
     apiKey: '',
     showApiKey: true,
     discounts: Object.freeze({}),
-    bailFilter: Object.freeze({ //TODO implement filters
+    bailFilter: Object.freeze({
       enabled: false,
       hideNonMatches: false,
-      'minBail': 0.0,
-      'maxBail': 0.0,
+      minBail: 0.0,
+      maxBail: 0.0,
     }),
   })
 
   const FILTERS = Object.freeze({ // TODO implement filters
     minBail: Object.freeze({
-      settingKey: 'minBail',
       displayName: 'Min Bail',
       valueType: 'number',
       htmlAttributes: Object.freeze({
         type: 'number',
         min: '0',
       }),
+      filterChecker: (userData, value) => value === null || userData.estimate >= value,
     }),
     maxBail: Object.freeze({
-      settingKey: 'maxBail',
       displayName: 'Max Bail',
       inputType: 'text',
       htmlAttributes: Object.freeze({
         type: 'number',
         min: '0',
       }),
+      filterChecker: (userData, value) => value === null || userData.estimate <= value,
     })
   })
 
@@ -144,6 +144,7 @@
       flex-direction: column;
       justify-content: flex-start;
       align-items: stretch;
+      height: auto;
     }
     
     .bb-flex-row {
@@ -152,7 +153,24 @@
       flex-wrap: wrap;
       justify-content: flex-start;
       align-items: center;
+    }
+    
+    .bb-inline-flex-row {
+      display: inline-flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      align-items: center;
+    }
+    
+    .bb-flex-gap4 {
       gap: 4px;
+    }
+    
+    .bb-settings-container {
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+      gap: 12px;
     }
     
     .bb-horizontal-divider {
@@ -221,26 +239,22 @@
       align-items: stretch;
     }
     
-    .bb-root-toggle-button {
+    #bb-root-toggle-button {
       width: 100%;
       cursor: pointer;
       background-clip: border-box;
       background-origin: border-box;
       background-image: ${titleBlackGradient};
       border-radius: 5px;
-      display: flex;
-      flex-direction: row;
-      justify-content: flex-start;
-      align-items: center;
       padding: 2px 5px 2px 5px;
     }
     
-    .bb-root-toggle-button-expanded {
-      border-radius: 5px 5px 0px 0px !important;
+    #bb-root-toggle-button:hover {  
+      background-image: ${titleBlackGradientReversed};
     }
     
-    .bb-root-toggle-button:hover {  
-      background-image: ${titleBlackGradientReversed};
+    #bb-root-toggle-button[data-expanded="true"] {
+      border-radius: 5px 5px 0px 0px !important;
     }
     
     .bb-root-toggle-label {
@@ -250,28 +264,21 @@
       color: var(--tutorial-title-color);
     }
     
-    .bb-content-container {
+    #bb-content-container {
       background-color: var(--default-bg-panel-color);
       border-radius: 0px 0px 5px 5px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      align-items: stretch;
       padding: 5px;
-      gap: 5px;
     }
     
-    .bb-content-container-collapsed {
+    .bb-collapsed {
       display: none !important;
     }
     
-    .bb-api-key-container {
-      display: inline-flex !important;
+    #bb-api-key-container {
       padding-bottom: 4px;
-      gap: 4px;
     }
     
-    .bb-api-key-input {
+    #bb-api-key-input {
       min-width: 22%;
       padding: 2px;
       caret-color: var(--bbc-input-color);
@@ -281,7 +288,7 @@
       border-radius: 4px;
     }
     
-    .bb-api-key-hide-input-button {
+    #bb-api-key-hide-input-button {
       cursor: pointer;
       font-size: 16px;
       padding: 0px;
@@ -309,26 +316,6 @@
       font-size: 14px;
     }
     
-    .bb-bail-discount-container {
-      gap: 4px;
-    }
-    
-    .bb-bail-discount {
-      gap: 4px;
-    }
-    
-    .bb-settings-container {
-      align-items: stretch !important;
-      gap: 12px;
-    }
-    
-    .bb-bail-filter-container {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      height: auto;
-    }
-    
     @media (max-width: 768px) {
       .bb-tooltip-popup {
         max-width: 50%;
@@ -348,27 +335,27 @@
   const rootContainer = document.createElement('div')
   rootContainer.innerHTML = `
   <div class="bb-root bb-flex-column">
-    <button class="bb-root-toggle-button">
+    <button id="bb-root-toggle-button" class="bb-flex-row">
       <span class="bb-root-toggle-label">${PROJECT_NAME}</span>
     </button>
-    <div class="bb-horizontal-divider"></div>
-    <div class="bb-content-container">
-      <div class="bb-flex-row bb-api-key-container">
+    <div id="bb-content-divider" class="bb-horizontal-divider"></div>
+    <div id="bb-content-container" class="bb-flex-column">
+      <div id="bb-api-key-container" class="bb-inline-flex-row bb-flex-gap4">
         <label class="bb-settings-label">API Key</label>
         <span class="bb-tooltip-trigger" data-tooltip-id="api-key"></span>
         <div class="bb-tooltip-popup" data-tooltip-id="api-key">
-          Optionally use a minimal access API key to update the below fields. The API Key is only stored in your browser 
-          and no requests are made to Torn's API without clicking the Validate button. Remember to click it after 
+          Optionally use a minimal access API key to update your bail discounts. The API Key is only stored in 
+          your browser and no requests are made to Torn's API without clicking Validate. Remember to click it after 
           completing a bail reducing education course or joining/leaving a Law Firm job.
         </div>
-        <input class="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
-        <button class="bb-api-key-hide-input-button"></button>
+        <input id="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
+        <button id="bb-api-key-hide-input-button"></button>
         <button class="bb-api-key-validate-button">Validate</button>
         <span class="bb-api-key-validate-button-response"></span>
       </div>
       <div class="bb-flex-row bb-settings-container">
-        <div class="bb-bail-discount-container bb-flex-column">
-          <div class="bb-flex-row">
+        <div id="bb-bail-discount-container" class="bb-flex-column bb-flex-gap4">
+          <div class="bb-inline-flex-row bb-flex-gap4">
             <span class="bb-settings-label">Bail Discounts</span>
             <span class="bb-tooltip-trigger" data-tooltip-id="bail-discounts"></span>
             <div class="bb-tooltip-popup" data-tooltip-id="bail-discounts">
@@ -378,8 +365,19 @@
           </div>
         </div>
         <div class="bb-vertical-divider"></div>
-        <div class="bb-bail-filter-container">
-          <span class="bb-settings-label">Bail Filter</span>
+        <div class="bb-flex-column bb-flex-gap4">
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <span class="bb-settings-label">Bail Filter</span>
+            <span class="bb-tooltip-trigger" data-tooltip-id="bail-filters"></span>
+            <div class="bb-tooltip-popup" data-tooltip-id="bail-filters">
+              Any bail not within the scope of the configured filters will be ignored by the bail sniper. You can also
+              optionally hide them from the list by enabling 'Hide Non-Matches'.
+            </div>
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <input id="bb-filter-hide-non-matches" type="checkbox" checked=${settings.bailFilter.hideNonMatches} />
+            <label for="bb-filter-hide-non-matches">Hide Non-Matches</label>
+          </div>
         </div>
       </div>
     </div>
@@ -395,7 +393,7 @@
   updateRootCollapsed()
 
   // Collapsible UI functionality
-  document.querySelector('.bb-root-toggle-button').addEventListener('click', () => {
+  document.getElementById('bb-root-toggle-button').addEventListener('click', () => {
     settings.rootCollapsed = !settings.rootCollapsed
     updateRootCollapsed()
     saveSettings()
@@ -414,19 +412,20 @@
       getTooltipPopup().style.display = 'none'
     })
     tooltipTrigger.addEventListener('click', () => {
-      getTooltipPopup().style.display = apiKeyTooltip.style.display === 'none' ? 'block' : 'none'
+      const tooltipPopup = getTooltipPopup()
+      tooltipPopup.style.display = tooltipPopup.style.display === 'none' ? 'block' : 'none'
     })
 
     // Tooltip positioning
     tooltipTrigger.addEventListener('mousemove', (event) => {
       const tooltipPopup = getTooltipPopup()
-      tooltipPopup.style.top = `${event.clientY + 15}px`
-      tooltipPopup.style.left = `${event.clientX + 15}px`
+      tooltipPopup.style.top = `${event.pageY + 15}px`
+      tooltipPopup.style.left = `${event.pageX + 15}px`
     })
   })
 
   // API Key input handling
-  const apiKeyInput = document.querySelector('.bb-api-key-input')
+  const apiKeyInput = document.getElementById('bb-api-key-input')
   apiKeyInput.value = settings.apiKey
   apiKeyInput.addEventListener('input', () => {
     settings.apiKey = apiKeyInput.value
@@ -434,7 +433,7 @@
   })
 
   // API Key visibility handling
-  document.querySelector('.bb-api-key-hide-input-button').addEventListener('click', () => {
+  document.getElementById('bb-api-key-hide-input-button').addEventListener('click', () => {
     settings.showApiKey = !settings.showApiKey
     updateApiKeyInputVisibility()
     saveSettings()
@@ -457,11 +456,11 @@
   })
 
   // Add the discount elements
-  const discountContainer = document.querySelector('.bb-bail-discount-container')
+  const discountContainer = document.getElementById('bb-bail-discount-container')
   for (const [discountId, discount] of Object.entries(DISCOUNTS)) {
     const discountElement = document.createElement('div')
     discountElement.innerHTML = `
-    <div class="bb-bail-discount bb-flex-row">
+    <div class="bb-flex-row bb-flex-gap4">
         <input class="bb-checkbox" type="checkbox" id="discount-${discountId}"/>
         <label for="discount-${discountId}">
           <span class="bb-italic-text">(${(discount.amount * 100).toFixed(0).padStart(2, '0')}%)</span>
@@ -480,6 +479,8 @@
       saveSettings()
     })
   }
+
+  // Add the filter elements
 
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
@@ -801,20 +802,20 @@
    * @return {void}
    */
   function updateRootCollapsed() {
-    const contentContainer = document.querySelector('.bb-content-container')
-    const contentDivider = document.querySelector('.bb-horizontal-divider')
-    const rootToggleButton = document.querySelector('.bb-root-toggle-button')
+    const contentContainer = document.getElementById('bb-content-container')
+    const contentDivider = document.getElementById('bb-content-divider')
+    const rootToggleButton = document.getElementById('bb-root-toggle-button')
     const rootToggleLabel = document.querySelector('.bb-root-toggle-label')
 
     if (settings.rootCollapsed) {
-      contentContainer.classList.add('bb-content-container-collapsed')
-      contentDivider.classList.add('bb-content-container-collapsed')
-      rootToggleButton.classList.remove('bb-root-toggle-button-expanded')
+      contentContainer.classList.add('bb-collapsed')
+      contentDivider.classList.add('bb-collapsed')
+      delete rootToggleButton.dataset.expanded
     }
     else {
-      contentContainer.classList.remove('bb-content-container-collapsed')
-      contentDivider.classList.remove('bb-content-container-collapsed')
-      rootToggleButton.classList.add('bb-root-toggle-button-expanded')
+      contentContainer.classList.remove('bb-collapsed')
+      contentDivider.classList.remove('bb-collapsed')
+      rootToggleButton.dataset.expanded = 'true'
     }
 
     rootToggleLabel.classList.add('bb-toggle-menu-' + (settings.rootCollapsed ? 'collapsed' : 'expanded'))
@@ -829,8 +830,8 @@
    * @return {void}
    */
   function updateApiKeyInputVisibility() {
-    document.querySelector('.bb-api-key-input').type = settings.showApiKey ? 'text' : 'password'
-    document.querySelector('.bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙉' : '🙈'
+    document.getElementById('bb-api-key-input').type = settings.showApiKey ? 'text' : 'password'
+    document.getElementById('bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙉' : '🙈'
   }
 
 })()
