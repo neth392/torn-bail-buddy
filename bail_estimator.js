@@ -168,9 +168,9 @@
     }
     
     .bb-settings-container {
-      align-items: flex-start !important;
+      align-items: stretch !important;
       justify-content: flex-start !important;
-      gap: 12px;
+      gap: 24px;
     }
     
     .bb-horizontal-divider {
@@ -180,15 +180,6 @@
       border-top-style: solid;
       border-top-width: 1px;
       border-top-color: var(--title-divider-top-color);
-    }
-    
-    .bb-vertical-divider {
-      border-right-style: solid;
-      border-right-width: 1px;
-      border-right-color: var(--title-divider-bottom-color);
-      border-left-style: solid;
-      border-left-width: 1px;
-      border-left-color: var(--title-divider-top-color);
     }
     
     .bb-tooltip-trigger {
@@ -298,7 +289,7 @@
       margin-left: -4px;
     }
     
-    .bb-api-key-validate-button {
+    #bb-api-key-validate-button {
       padding: 2px;
       border: none;
       border-radius: 4px;
@@ -307,11 +298,11 @@
       cursor: pointer;
     }
     
-    .bb-api-key-validate-button:hover {
+    #bb-api-key-validate-button:hover {
       background-color: var(--default-blue-hover-color);
     }
     
-    .bb-api-key-validate-button-response {
+    #bb-api-key-validate-button-response {
       line-height: 1;
       font-size: 14px;
     }
@@ -350,8 +341,8 @@
         </div>
         <input id="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
         <button id="bb-api-key-hide-input-button"></button>
-        <button class="bb-api-key-validate-button">Validate</button>
-        <span class="bb-api-key-validate-button-response"></span>
+        <button id="bb-api-key-validate-button">Validate</button>
+        <span id="bb-api-key-validate-button-response"></span>
       </div>
       <div class="bb-flex-row bb-settings-container">
         <div id="bb-bail-discount-container" class="bb-flex-column bb-flex-gap4">
@@ -364,7 +355,6 @@
             </div>
           </div>
         </div>
-        <div class="bb-vertical-divider"></div>
         <div class="bb-flex-column bb-flex-gap4">
           <div class="bb-inline-flex-row bb-flex-gap4">
             <span class="bb-settings-label">Bail Filter</span>
@@ -377,6 +367,17 @@
           <div class="bb-inline-flex-row bb-flex-gap4">
             <input id="bb-filter-hide-non-matches" type="checkbox" checked=${settings.bailFilter.hideNonMatches} />
             <label for="bb-filter-hide-non-matches">Hide Non-Matches</label>
+          </div>
+        </div>
+        <div>
+          <div class="bb-flex-column bb-flex-gap4">
+            <div class="bb-inline-flex-row bb-flex-gap4">
+              <span class="bb-settings-label">Sorting</span>
+              <span class="bb-tooltip-trigger" data-tooltip-id="bail-sorting"></span>
+              <div class="bb-tooltip-popup" data-tooltip-id="bail-sorting">
+                Defines how the bail list below is sorted. Default means Torn's default sorting.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -440,7 +441,7 @@
   })
 
   // Validate button click handling
-  const apiKeyValidateButton = document.querySelector('.bb-api-key-validate-button')
+  const apiKeyValidateButton = document.getElementById('#bb-api-key-validate-button')
   apiKeyValidateButton.addEventListener('click', async () => {
     apiKeyValidateButton.disabled = true
     displayValidateResponseText('Validating...', 'var(--default-yellow-color)', 999_999)
@@ -470,7 +471,7 @@
     `
     discountContainer.appendChild(discountElement)
 
-    const checkboxElement = document.querySelector(`#discount-${discountId}`)
+    const checkboxElement = document.getElementById(`discount-${discountId}`)
     // Update if it is checked or not
     checkboxElement.checked = discountId in settings.discounts
     checkboxElement.addEventListener('change', () => {
@@ -481,6 +482,10 @@
   }
 
   // Add the filter elements
+  // TODO
+
+  // Modify the reason to include estimate
+  document.querySelector('.reason.title-divider.divider-spiky').textContent = "Reason & Estimate"
 
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
@@ -545,7 +550,11 @@
       .flatMap(mutation => Array.from(mutation.addedNodes))
       .filter(node => node instanceof Element && node.parentNode instanceof Element)
       .filter(element => element.parentNode.classList.contains('user-info-list-wrap'))
-      .forEach(updateDisplayedBail);
+      .forEach(element => {
+        const userData = extractUserData(element)
+        bailData[userData.id] = userData
+        GM_log('updateEstimateDisplay: ' + userData.name)
+      });
   }
 
 
@@ -556,7 +565,7 @@
    *
    * @return {void} Does not return a value.
    */
-  function updateAllDisplayedBails() {
+  function updateAllDisplayedEstimates() {
     // Select the list of jailed users
     const jailedUserList = document.querySelectorAll('.user-info-list-wrap > li')
 
@@ -564,23 +573,13 @@
     jailedUserList.forEach((bailElement, index) => updateDisplayedBail(bailElement))
   }
 
-  /**
-   * Updates the displayed bail information in the UI for a given bail element.
-   * This includes extracting user data, saving it for functionality purposes, and updating or creating
-   * necessary UI elements to reflect the latest data.
-   *
-   * @param {HTMLElement} bailElement - The HTML element containing bail information to be processed and updated.
-   * @return {void}
-   */
-  function updateDisplayedBail(bailElement) {
-    const userData = extractUserData(bailElement)
-    GM_log('UPDATE: ' + userData.name)
+  function updateEstimateDisplay(userData) {
 
     // Store in bail data for bail sniper functionality
     bailData[userData.id] = userData
 
     // Find the estimate element
-    let estimateElement = bailElement.querySelector('.info-wrap .reason .bb-estimate-span')
+    let estimateElement = userData.element.querySelector('.info-wrap .reason .bb-estimate-span')
 
     // Create the reason element if not done
     if (estimateElement == null) {
@@ -599,7 +598,7 @@
   /**
    * Extracts the jailed user's data from the given element.
    *
-   * @param {Element} element - The DOM element containing the user information.
+   * @param {Element} bailElement - The DOM element containing the user information.
    * @return {Object} An object containing the extracted user data, including:
    *                  - `id` (string): The user's unique identifier.
    *                  - `name` (string): The user's name.
@@ -608,19 +607,19 @@
    *                  - `estimate` (number): The calculated estimate based on level and remaining time.
    *                  - `estimateString` (string): The formatted estimate value.
    */
-  function extractUserData(element) {
+  function extractUserData(bailElement) {
     // User ID & name
-    const userNameElement = element.querySelector('.user.name')
+    const userNameElement = bailElement.querySelector('.user.name')
     const id = userNameElement.href.split('=')[1]
     const name = userNameElement.title.split('[')[0].trim()
 
     // Time remaining in jail
-    const timeElement = element.querySelector('.info-wrap .time')
+    const timeElement = bailElement.querySelector('.info-wrap .time')
     const timeString = timeElement.textContent.trim()
     const minutes = timeToMinutes(timeString).toFixed(0)
 
     // User level
-    const levelElement = element.querySelector('.info-wrap .level')
+    const levelElement = bailElement.querySelector('.info-wrap .level')
     const level = parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim())
 
     // Estimate & estimate string
@@ -634,6 +633,7 @@
       level: level,
       estimate: estimate,
       estimateString: estimateString,
+      element: bailElement,
     }
   }
 
@@ -689,7 +689,7 @@
       delete settings.discounts[discountId]
     }
     if (updateElement) {
-      document.querySelector(`#discount-${discountId}`).checked = hasDiscount
+      document.getElementById(`discount-${discountId}`).checked = hasDiscount
     }
     return true
   }
@@ -772,7 +772,7 @@
    * @return {void} This function does not return any value.
    */
   function displayValidateResponseText(text, color, displayTime = 5_000) {
-    const responseElement = document.querySelector('.bb-api-key-validate-button-response')
+    const responseElement = document.getElementById('bb-api-key-validate-button-response')
     clearValidateResponseText(responseElement)
     responseElement.textContent = text
     responseElement.style.color = color
@@ -832,6 +832,26 @@
   function updateApiKeyInputVisibility() {
     document.getElementById('bb-api-key-input').type = settings.showApiKey ? 'text' : 'password'
     document.getElementById('bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙉' : '🙈'
+  }
+
+  function findCheapestBail() { //TODO ensure being used
+    let cheapest = null
+    for (const userData of bailData.values()) {
+      if (matchesFilters(userData) && (cheapest === null || userData.estimate < cheapest.estimate)) {
+        cheapest = userData
+      }
+    }
+    return cheapest
+  }
+
+  function matchesFilters(userData) { //TODO ensure being used
+    for (const [filterId, filter] of Object.entries(FILTERS)) {
+      const filterValue = settings.bailFilter[filterId]
+      if (!filter.filterChecker.call(userData, filterValue)) {
+        return false
+      }
+    }
+    return true
   }
 
 })()
