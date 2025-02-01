@@ -19,6 +19,12 @@
   const STORAGE_KEY = 'settings'
   const API_URL = 'https://api.torn.com/user/?selections=education,profile&key='
 
+  const EVENT_ESTIMATE_UPDATED = 'bb-estimate-updated'
+  const EVENT_FILTER_RESULT_UPDATED = 'bb-filter-result-updated'
+  const EVENT_HIDE_NON_MATCHES_UPDATED = 'bb-hide-non-matches-updated'
+  const EVENT_FILTERS_UPDATED = 'bb-filters-updated'
+  const EVENT_DISCOUNTS_UPDATED = 'bb-discounts-updated'
+
   const DISCOUNTS = Object.freeze({
     'administrative-law': Object.freeze({
       displayName: 'Administrative Law',
@@ -55,8 +61,8 @@
     bailFilter: Object.freeze({
       enabled: false,
       hideNonMatches: false,
-      minBail: 0.0,
-      maxBail: 0.0,
+      minBail: null,
+      maxBail: null,
     }),
   })
 
@@ -89,6 +95,8 @@
     maximumFractionDigits: 0,
   })
 
+  const eventTarget = new EventTarget()
+
   const style = document.createElement('style')
   style.type = 'text/css'
 
@@ -112,41 +120,40 @@
     .bb-toggle-menu-collapsed::before {
       content: '► ';
     }
-    
+
     .bb-toggle-menu-expanded::before {
       content: '▼ ';
     }
-    
+
     .bb-generic-text {
       font-size: 12px;
       color: var(--default-color);
     }
-    
+
     .bb-italic-text {
       font-size: 12px;
       color: #999;
       font-style: italic;
     }
-    
+
     .bb-settings-label {
       font-size: 14px;
       color: var(--default-color);
       font-weight: bold;
     }
-    
+
     .bb-checkbox {
       border-radius: 2px;
       margin-right: 2px;
     }
-    
+
     .bb-flex-column {
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
       align-items: stretch;
-      height: auto;
     }
-    
+
     .bb-flex-row {
       display: flex;
       flex-direction: row;
@@ -154,7 +161,7 @@
       justify-content: flex-start;
       align-items: center;
     }
-    
+
     .bb-inline-flex-row {
       display: inline-flex;
       flex-direction: row;
@@ -162,17 +169,17 @@
       justify-content: flex-start;
       align-items: center;
     }
-    
+
     .bb-flex-gap4 {
       gap: 4px;
     }
-    
+
     .bb-settings-container {
-      align-items: stretch !important;
+      align-items: flex-start !important;
       justify-content: flex-start !important;
       gap: 24px;
     }
-    
+
     .bb-horizontal-divider {
       border-bottom-style: solid;
       border-bottom-width: 1px;
@@ -181,7 +188,7 @@
       border-top-width: 1px;
       border-top-color: var(--title-divider-top-color);
     }
-    
+
     .bb-tooltip-trigger {
       padding: 1px;
       border: 1px solid var(--default-color);
@@ -197,11 +204,11 @@
       font-weight: 900;
       cursor: pointer;
     }
-    
+
     .bb-tooltip-trigger::before {
       content: '?';
     }
-    
+
     .bb-tooltip-popup {
       position: absolute;
       text-wrap: pretty;
@@ -217,19 +224,31 @@
       z-index: 10;
       display: none;
     }
-    
+
+    @media (max-width: 768px) {
+      .bb-tooltip-popup {
+        max-width: 50%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .bb-tooltip-popup {
+        max-width: 70%;
+      }
+    }
+
     .bb-estimate-span {
       color: var(--default-green-color);
     }
-    
-    .bb-root {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      align-items: stretch;
+
+    .bb-collapsed {
+      display: none !important;
     }
-    
+
+    #bb-root {
+      width: 100%;
+    }
+
     #bb-root-toggle-button {
       width: 100%;
       cursor: pointer;
@@ -239,36 +258,32 @@
       border-radius: 5px;
       padding: 2px 5px 2px 5px;
     }
-    
-    #bb-root-toggle-button:hover {  
+
+    #bb-root-toggle-button:hover {
       background-image: ${titleBlackGradientReversed};
     }
-    
+
     #bb-root-toggle-button[data-expanded="true"] {
       border-radius: 5px 5px 0px 0px !important;
     }
-    
+
     .bb-root-toggle-label {
       font-weight: bold;
       text-align: left;
       text-shadow: var(--tutorial-title-shadow);
       color: var(--tutorial-title-color);
     }
-    
+
     #bb-content-container {
       background-color: var(--default-bg-panel-color);
       border-radius: 0px 0px 5px 5px;
       padding: 5px;
     }
-    
-    .bb-collapsed {
-      display: none !important;
-    }
-    
+
     #bb-api-key-container {
       padding-bottom: 4px;
     }
-    
+
     #bb-api-key-input {
       min-width: 22%;
       padding: 2px;
@@ -278,7 +293,7 @@
       border: 1px solid var(--bbc-input-border-color);
       border-radius: 4px;
     }
-    
+
     #bb-api-key-hide-input-button {
       cursor: pointer;
       font-size: 16px;
@@ -288,7 +303,7 @@
       line-height: 1;
       margin-left: -4px;
     }
-    
+
     #bb-api-key-validate-button {
       padding: 2px;
       border: none;
@@ -297,35 +312,23 @@
       color: var(--default-black-color);
       cursor: pointer;
     }
-    
+
     #bb-api-key-validate-button:hover {
       background-color: var(--default-blue-hover-color);
     }
-    
+
     #bb-api-key-validate-button-response {
       line-height: 1;
       font-size: 14px;
     }
-    
-    @media (max-width: 768px) {
-      .bb-tooltip-popup {
-        max-width: 50%;
-      }
-    }
-    
-    @media (max-width: 480px) {
-      .bb-tooltip-popup {
-        max-width: 70%;
-      }
-    }
 
-    
+
   `
   document.head.appendChild(style)
 
   const rootContainer = document.createElement('div')
   rootContainer.innerHTML = `
-  <div class="bb-root bb-flex-column">
+  <div id="bb-root" class="bb-flex-column">
     <button id="bb-root-toggle-button" class="bb-flex-row">
       <span class="bb-root-toggle-label">${PROJECT_NAME}</span>
     </button>
@@ -335,8 +338,8 @@
         <label class="bb-settings-label">API Key</label>
         <span class="bb-tooltip-trigger" data-tooltip-id="api-key"></span>
         <div class="bb-tooltip-popup" data-tooltip-id="api-key">
-          Optionally use a minimal access API key to update your bail discounts. The API Key is only stored in 
-          your browser and no requests are made to Torn's API without clicking Validate. Remember to click it after 
+          Optionally use a minimal access API key to update your bail discounts. The API Key is only stored in
+          your browser and no requests are made to Torn's API without clicking Validate. Remember to click it after
           completing a bail reducing education course or joining/leaving a Law Firm job.
         </div>
         <input id="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
@@ -369,14 +372,12 @@
             <label for="bb-filter-hide-non-matches">Hide Non-Matches</label>
           </div>
         </div>
-        <div>
-          <div class="bb-flex-column bb-flex-gap4">
-            <div class="bb-inline-flex-row bb-flex-gap4">
-              <span class="bb-settings-label">Sorting</span>
-              <span class="bb-tooltip-trigger" data-tooltip-id="bail-sorting"></span>
-              <div class="bb-tooltip-popup" data-tooltip-id="bail-sorting">
-                Defines how the bail list below is sorted. Default means Torn's default sorting.
-              </div>
+        <div class="bb-flex-column bb-flex-gap4">
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <span class="bb-settings-label">Sorting</span>
+            <span class="bb-tooltip-trigger" data-tooltip-id="bail-sorting"></span>
+            <div class="bb-tooltip-popup" data-tooltip-id="bail-sorting">
+              Defines how the bail list below is sorted. Default means Torn's default sorting.
             </div>
           </div>
         </div>
@@ -441,7 +442,7 @@
   })
 
   // Validate button click handling
-  const apiKeyValidateButton = document.getElementById('#bb-api-key-validate-button')
+  const apiKeyValidateButton = document.getElementById('bb-api-key-validate-button')
   apiKeyValidateButton.addEventListener('click', async () => {
     apiKeyValidateButton.disabled = true
     displayValidateResponseText('Validating...', 'var(--default-yellow-color)', 999_999)
@@ -476,7 +477,8 @@
     checkboxElement.checked = discountId in settings.discounts
     checkboxElement.addEventListener('change', () => {
       setBailDiscount(discountId, checkboxElement.checked, false)
-      updateAllDisplayedBails()
+      updateAllEstimateSpans()
+
       saveSettings()
     })
   }
@@ -487,12 +489,16 @@
   // Modify the reason to include estimate
   document.querySelector('.reason.title-divider.divider-spiky').textContent = "Reason & Estimate"
 
+  // Listen to custom events
+  eventTarget.addEventListener(EVENT_ESTIMATE_UPDATED, onEstimateUpdated)
+  eventTarget.addEventListener(EVENT_FILTER_RESULT_UPDATED, onFilterResultUpdated)
+  eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_UPDATED, onHideNonMatchesUpdated)
+
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
   const listObserver = new MutationObserver(listMutationCallback)
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
-
 
   /**
    * Loads and retrieves the settings from storage.
@@ -538,12 +544,7 @@
     return settingsModified
   }
 
-  /**
-   * Handles a list of mutation records on the jailed user list by filtering for mutations of type 'childList'
-   * and executing a handler function for each relevant mutation.
-   *
-   * @param {MutationRecord[]} mutationList - The list of mutation records to process.
-   */
+  // TODO updated docs
   function listMutationCallback(mutationList) {
     mutationList
       .filter(mutation => mutation.type === 'childList')
@@ -553,38 +554,32 @@
       .forEach(element => {
         const userData = extractUserData(element)
         bailData[userData.id] = userData
-        GM_log('updateEstimateDisplay: ' + userData.name)
+        updateEstimate(userData)
       });
   }
 
-
-  /**
-   * Updates the displayed information for all jailed users by iterating
-   * through elements having the specified class and applying the
-   * `updateDisplayedBail` function to each one.
-   *
-   * @return {void} Does not return a value.
-   */
-  function updateAllDisplayedEstimates() {
-    // Select the list of jailed users
-    const jailedUserList = document.querySelectorAll('.user-info-list-wrap > li')
-
-    // Iterate the list of jailed users
-    jailedUserList.forEach((bailElement, index) => updateDisplayedBail(bailElement))
+  function updateAllEstimates() {
+    bailData.values().forEach(updateEstimate)
   }
 
-  function updateEstimateDisplay(userData) {
+  function updateEstimate(userData) {
+    const prevEstimate = bailData.estimate
+    bailData.estimate = calculateEstimate(bailData.level, bailData.minutes)
+    if (prevEstimate !== bailData.estimate) {
+      bailData.estimateString = formatEstimate(bailData.estimate)
+      const event = new CustomEvent(EVENT_ESTIMATE_UPDATED, { userData: userData })
+      eventTarget.dispatchEvent(event)
+    }
+  }
 
-    // Store in bail data for bail sniper functionality
-    bailData[userData.id] = userData
-
+  function updateEstimateSpan(userData) {
     // Find the estimate element
-    let estimateElement = userData.element.querySelector('.info-wrap .reason .bb-estimate-span')
+    let estimateElement = userData.bailElement.querySelector('.info-wrap .reason .bb-estimate-span')
 
     // Create the reason element if not done
     if (estimateElement == null) {
       estimateElement = createEstimateSpanElement(userData.estimateString)
-      const reasonElement = bailElement.querySelector('.info-wrap .reason')
+      const reasonElement = userData.bailElement.querySelector('.info-wrap .reason')
       reasonElement.appendChild(document.createElement('br'))
       reasonElement.appendChild(estimateElement)
     }
@@ -595,18 +590,36 @@
     }
   }
 
-  /**
-   * Extracts the jailed user's data from the given element.
-   *
-   * @param {Element} bailElement - The DOM element containing the user information.
-   * @return {Object} An object containing the extracted user data, including:
-   *                  - `id` (string): The user's unique identifier.
-   *                  - `name` (string): The user's name.
-   *                  - `minutes` (number): The time remaining in jail, converted to minutes.
-   *                  - `level` (number): The user's level as a numerical value.
-   *                  - `estimate` (number): The calculated estimate based on level and remaining time.
-   *                  - `estimateString` (string): The formatted estimate value.
-   */
+  function updateFilterResult(userData) {
+    const lastResult = userData.filterResult
+    userData.filterResult = true
+    for (const [filterId, filter] of Object.entries(FILTERS)) {
+      const filterValue = settings.bailFilter[filterId]
+      if (!filter.filterChecker(userData, filterValue)) {
+        userData.filterResult = false
+        break
+      }
+    }
+    if (lastResult !== userData.filterResult) {
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_UPDATED, { userData: userData }))
+    }
+  }
+
+  function updateBailVisibility(userData) {
+    bailData.bailElement.style.display = (settings.filter.hideNonMatches && !userData.filterResult) ? 'none' : 'list-item'
+  }
+
+  function setHideNonMatches(hideNonMatches) {
+    if (settings.filter.hideNonMatches === hideNonMatches) {
+      return
+    }
+    settings.filter.hideNonMatches = hideNonMatches
+    saveSettings()
+    const event = new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED, hideNonMatches)
+    eventTarget.dispatchEvent(event)
+  }
+
+  // TODO updated docs
   function extractUserData(bailElement) {
     // User ID & name
     const userNameElement = bailElement.querySelector('.user.name')
@@ -622,19 +635,19 @@
     const levelElement = bailElement.querySelector('.info-wrap .level')
     const level = parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim())
 
-    // Estimate & estimate string
-    const estimate = calculateEstimate(level, minutes)
-    const estimateString = formatEstimate(estimate)
-
-    return {
+    const userData = {
       id: id,
       name: name,
       minutes: minutes,
       level: level,
-      estimate: estimate,
-      estimateString: estimateString,
-      element: bailElement,
+      bailElement: bailElement,
     }
+
+    GM_log("ESTIMATE EXTRACTED: " + userData.name+", estimate=" + userData.estimate)
+
+    userData.true = matchesFilters(userData)
+
+    return userData
   }
 
   /**
@@ -668,32 +681,6 @@
     return estimate * discountMultiplier
   }
 
-
-  /**
-   * Toggles the discount setting for a specific discount ID and updates the UI element if specified.
-   *
-   * @param {string} discountId - The unique identifier for the discount.
-   * @param {boolean} hasDiscount - Indicates whether the discount is active (true) or inactive (false).
-   * @param {boolean} updateElement - Determines whether the corresponding UI element should be updated.
-   * @return {boolean} Returns true if settings was updated, false if not.
-   */
-  function setBailDiscount(discountId, hasDiscount, updateElement) {
-    if (hasDiscount === discountId in settings.discounts) {
-      return false
-    }
-
-    if (hasDiscount) {
-      settings.discounts[discountId] = true
-    }
-    else {
-      delete settings.discounts[discountId]
-    }
-    if (updateElement) {
-      document.getElementById(`discount-${discountId}`).checked = hasDiscount
-    }
-    return true
-  }
-
   /**
    * Converts a time string in the format "HH:MM" to the total number of minutes.
    * If the input does not match the expected format, it returns -1.
@@ -723,6 +710,33 @@
   }
 
   /**
+   * Toggles the discount setting for a specific discount ID and updates the UI element if specified.
+   *
+   * @param {string} discountId - The unique identifier for the discount.
+   * @param {boolean} hasDiscount - Indicates whether the discount is active (true) or inactive (false).
+   * @param {boolean} updateElement - Determines whether the corresponding UI element should be updated.
+   * @return {boolean} Returns true if settings was updated, false if not.
+   */
+  function setBailDiscount(discountId, hasDiscount, updateElement) {
+    if (hasDiscount === discountId in settings.discounts) {
+      return false
+    }
+
+    if (hasDiscount) {
+      settings.discounts[discountId] = true
+    }
+    else {
+      delete settings.discounts[discountId]
+    }
+    if (updateElement) {
+      document.getElementById(`discount-${discountId}`).checked = hasDiscount
+    }
+    return true
+  }
+
+
+
+  /**
    * Validates the provided API key by sending a request to the API endpoint.
    *
    * @param {string} apiKey - The API key to be validated.
@@ -750,8 +764,8 @@
       }
 
       if (settingsModified) {
-        GM_log("SETTINGS MODIFIED, UPDATING BAILS")
-        updateAllDisplayedBails()
+        GM_log("SETTINGS MODIFIED, UPDATING ESTIMATE SPANS")
+        updateAllEstimateSpans()
         saveSettings()
       }
 
@@ -834,24 +848,34 @@
     document.getElementById('bb-api-key-hide-input-button').textContent = settings.showApiKey ? '🙉' : '🙈'
   }
 
+
   function findCheapestBail() { //TODO ensure being used
     let cheapest = null
     for (const userData of bailData.values()) {
-      if (matchesFilters(userData) && (cheapest === null || userData.estimate < cheapest.estimate)) {
+      if (userData.matchesFilters && (cheapest === null || userData.estimate < cheapest.estimate)) {
         cheapest = userData
       }
     }
     return cheapest
   }
 
-  function matchesFilters(userData) { //TODO ensure being used
-    for (const [filterId, filter] of Object.entries(FILTERS)) {
-      const filterValue = settings.bailFilter[filterId]
-      if (!filter.filterChecker.call(userData, filterValue)) {
-        return false
-      }
-    }
-    return true
+  // EVENT HANDLERS
+
+  function onEstimateUpdated(event) {
+    updateEstimateSpan(event.userData)
+    updateFilterResult(event.userData)
+  }
+
+  function onFilterResultUpdated(event) {
+    updateBailVisibility(event.userData)
+  }
+
+  function onHideNonMatchesUpdated(event) {
+    bailData.values().forEach(updateBailVisibility)
+  }
+
+  function onBailVisibilityUpdated(event) {
+    event.userData.bailElement.display = event.userData.visible
   }
 
 })()
