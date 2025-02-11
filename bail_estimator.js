@@ -22,8 +22,6 @@
   const EVENT_ESTIMATE_UPDATED = 'bb-estimate-updated'
   const EVENT_FILTER_RESULT_UPDATED = 'bb-filter-result-updated'
   const EVENT_HIDE_NON_MATCHES_UPDATED = 'bb-hide-non-matches-updated'
-  const EVENT_FILTERS_UPDATED = 'bb-filters-updated'
-  const EVENT_DISCOUNTS_UPDATED = 'bb-discounts-updated'
 
   const DISCOUNTS = Object.freeze({
     'administrative-law': Object.freeze({
@@ -49,20 +47,6 @@
       category: 'Job',
       amount: .5,
       discountChecker: (response) => response.job.company_type === 2 ,
-    }),
-  })
-
-  const DEFAULT_SETTINGS = Object.freeze({
-    rootCollapsed: false,
-    autoScroll: false,
-    apiKey: '',
-    showApiKey: true,
-    discounts: Object.freeze({}),
-    bailFilter: Object.freeze({
-      enabled: false,
-      hideNonMatches: false,
-      minBail: null,
-      maxBail: null,
     }),
   })
 
@@ -140,6 +124,7 @@
       font-size: 14px;
       color: var(--default-color);
       font-weight: bold;
+      text-wrap: nowrap;
     }
 
     .bb-checkbox {
@@ -244,7 +229,16 @@
     .bb-collapsed {
       display: none !important;
     }
-
+    
+    .bb-input {
+      padding: 2px;
+      caret-color: var(--bbc-input-color);
+      color: var(--bbc-input-color);
+      background-color: var(--bbc-input-bg-color);
+      border: 1px solid var(--bbc-input-border-color);
+      border-radius: 4px;
+    }
+    
     #bb-root {
       width: 100%;
     }
@@ -286,12 +280,6 @@
 
     #bb-api-key-input {
       min-width: 22%;
-      padding: 2px;
-      caret-color: var(--bbc-input-color);
-      color: var(--bbc-input-color);
-      background-color: var(--bbc-input-bg-color);
-      border: 1px solid var(--bbc-input-border-color);
-      border-radius: 4px;
     }
 
     #bb-api-key-hide-input-button {
@@ -305,25 +293,18 @@
     }
 
     #bb-api-key-validate-button {
-      padding: 2px;
-      border: none;
-      border-radius: 4px;
-      background-color: var(--default-blue-color);
-      color: var(--default-black-color);
-      cursor: pointer;
+      line-height: normal;
+      height: auto;
+      font-size: 14px;
     }
-
-    #bb-api-key-validate-button:hover {
-      background-color: var(--default-blue-hover-color);
-    }
-
+  
     #bb-api-key-validate-button-response {
       line-height: 1;
       font-size: 14px;
     }
 
-
   `
+
   document.head.appendChild(style)
 
   const rootContainer = document.createElement('div')
@@ -342,9 +323,9 @@
           your browser and no requests are made to Torn's API without clicking Validate. Remember to click it after
           completing a bail reducing education course or joining/leaving a Law Firm job.
         </div>
-        <input id="bb-api-key-input" placeholder="Enter your API key" value="${settings.apiKey}" />
+        <input id="bb-api-key-input" class="bb-input" placeholder="Enter your API key" value="${settings.apiKey}" />
         <button id="bb-api-key-hide-input-button"></button>
-        <button id="bb-api-key-validate-button">Validate</button>
+        <button id="bb-api-key-validate-button" class="torn-btn">Validate</button>
         <span id="bb-api-key-validate-button-response"></span>
       </div>
       <div class="bb-flex-row bb-settings-container">
@@ -370,6 +351,16 @@
           <div class="bb-inline-flex-row bb-flex-gap4">
             <input id="bb-filter-hide-non-matches" type="checkbox" checked=${settings.bailFilter.hideNonMatches} />
             <label for="bb-filter-hide-non-matches">Hide Non-Matches</label>
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <label for="bb-filter-min-bail">Max Bail</label>
+            <input id ="bb-filter-max-bail" class="bb-input bb-currency-input" type="number" 
+            value=${settings.bailFilter.maxBail} placeholder="Not Set" min="0"/>
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <label for="bb-filter-min-bail">Max Bail</label>
+            <input id ="bb-filter-max-bail" class="bb-input bb-currency-input" type="number" 
+            value=${settings.bailFilter.maxBail} placeholder="Not Set" min="0"/>
           </div>
         </div>
         <div class="bb-flex-column bb-flex-gap4">
@@ -423,6 +414,17 @@
       const tooltipPopup = getTooltipPopup()
       tooltipPopup.style.top = `${event.pageY + 15}px`
       tooltipPopup.style.left = `${event.pageX + 15}px`
+    })
+  })
+
+  // Currency formatting
+  document.querySelectorAll('.bb-currency-input').forEach((currencyInput) => {
+    currencyInput.addEventListener('change', () => {
+      const inputValue = currencyInput.value
+      if (inputValue === '') {
+        return
+      }
+      currencyInput.value = DOLLAR_FORMAT.format(Number.parseFloat(inputValue)).toString()
     })
   })
 
@@ -500,13 +502,25 @@
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
 
-  /**
-   * Loads and retrieves the settings from storage.
-   *
-   * @return {Object} Returns the stored settings object, or the default settings if no stored settings are found.
-   */
+  function createDefaultSettings() {
+    return {
+      rootCollapsed: false,
+      autoScroll: false,
+      apiKey: '',
+      showApiKey: true,
+      discounts: {},
+      bailFilter: {
+        enabled: false,
+        hideNonMatches: false,
+        minBail: null,
+        maxBail: null,
+      },
+    }
+  }
+
+  // TODO docs
   function loadSettings() {
-    return GM_getValue(STORAGE_KEY, {})
+    return GM_getValue(STORAGE_KEY)
   }
 
   /**
@@ -518,25 +532,19 @@
     GM_setValue(STORAGE_KEY, settings)
   }
 
-  /**
-   * Sanitizes the given settings object by ensuring it matches the structure of the DEFAULT_SETTINGS object.
-   * Missing keys from the DEFAULT_SETTINGS object are added, and extraneous keys not in DEFAULT_SETTINGS are removed.
-   *
-   * @param {Object} settings - The settings object to be sanitized.
-   * @return {boolean} Returns true if the settings object was modified, false otherwise.
-   */
-  function sanitizeSettings(settings) {
+  // TODO docs
+  function sanitizeSettings(defaultSettings) {
     let settingsModified = false
     // Add missing settings
-    for (const key in DEFAULT_SETTINGS) {
+    for (const key in defaultSettings) {
       if (!(key in settings)) {
-        settings[key] = DEFAULT_SETTINGS[key]
+        settings[key] = defaultSettings[key]
         settingsModified = true
       }
     }
     // Remove old settings
     for (const key in settings) {
-      if (!(key in DEFAULT_SETTINGS)) {
+      if (!(key in defaultSettings)) {
         delete settings[key]
         settingsModified = true
       }
@@ -567,7 +575,7 @@
     bailData.estimate = calculateEstimate(bailData.level, bailData.minutes)
     if (prevEstimate !== bailData.estimate) {
       bailData.estimateString = formatEstimate(bailData.estimate)
-      const event = new CustomEvent(EVENT_ESTIMATE_UPDATED, { userData: userData })
+      const event = new CustomEvent(EVENT_ESTIMATE_UPDATED, { detail: { userData: userData } })
       eventTarget.dispatchEvent(event)
     }
   }
@@ -601,22 +609,23 @@
       }
     }
     if (lastResult !== userData.filterResult) {
-      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_UPDATED, { userData: userData }))
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_UPDATED, { detail: { userData: userData } }))
     }
   }
 
   function updateBailVisibility(userData) {
-    bailData.bailElement.style.display = (settings.filter.hideNonMatches && !userData.filterResult) ? 'none' : 'list-item'
+    userData.bailElement.style.display = (settings.bailFilter.hideNonMatches && !userData.filterResult) ? 'none' : 'list-item'
   }
 
   function setHideNonMatches(hideNonMatches) {
-    if (settings.filter.hideNonMatches === hideNonMatches) {
+    if (settings.bailFilter.hideNonMatches === hideNonMatches) {
+      // Do nothing if provided value is the same as current
       return
     }
-    settings.filter.hideNonMatches = hideNonMatches
-    saveSettings()
-    const event = new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED, hideNonMatches)
+    settings.bailFilter.hideNonMatches = hideNonMatches
+    const event = new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED)
     eventTarget.dispatchEvent(event)
+    saveSettings()
   }
 
   // TODO updated docs
@@ -643,9 +652,7 @@
       bailElement: bailElement,
     }
 
-    GM_log("ESTIMATE EXTRACTED: " + userData.name+", estimate=" + userData.estimate)
-
-    userData.true = matchesFilters(userData)
+    GM_log("EXTRACTED: " + name)
 
     return userData
   }
@@ -862,20 +869,17 @@
   // EVENT HANDLERS
 
   function onEstimateUpdated(event) {
-    updateEstimateSpan(event.userData)
-    updateFilterResult(event.userData)
+    GM_log("onEstimateUpdated: " + event.detail.userData.toString())
+    updateEstimateSpan(event.detail.userData)
+    updateFilterResult(event.detail.userData)
   }
 
   function onFilterResultUpdated(event) {
-    updateBailVisibility(event.userData)
+    updateBailVisibility(event.detail.userData)
   }
 
-  function onHideNonMatchesUpdated(event) {
+  function onHideNonMatchesUpdated() {
     bailData.values().forEach(updateBailVisibility)
-  }
-
-  function onBailVisibilityUpdated(event) {
-    event.userData.bailElement.display = event.userData.visible
   }
 
 })()
