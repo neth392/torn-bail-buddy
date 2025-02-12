@@ -20,6 +20,7 @@
   const API_URL = 'https://api.torn.com/user/?selections=education,profile&key='
 
   const EVENT_ESTIMATE_UPDATED = 'bb-estimate-updated'
+  const EVENT_DISCOUNTS_UPDATED = 'bb-discounts-updated'
   const EVENT_FILTER_RESULT_UPDATED = 'bb-filter-result-updated'
   const EVENT_HIDE_NON_MATCHES_UPDATED = 'bb-hide-non-matches-updated'
 
@@ -79,7 +80,25 @@
     maximumFractionDigits: 0,
   })
 
-  const eventTarget = new EventTarget()
+  const DEFAULT_SETTINGS = {
+    rootCollapsed: false,
+    autoScroll: false,
+    apiKey: '',
+    showApiKey: true,
+    discounts: {},
+    bailFilter: {
+      enabled: false,
+      hideNonMatches: false,
+      minBail: null,
+      maxBail: null,
+    },
+  }
+
+  // Load & sanitize the settings
+  const settings = loadSettings()
+  if (sanitizeSettings()) {
+    saveSettings()
+  }
 
   const style = document.createElement('style')
   style.type = 'text/css'
@@ -89,15 +108,6 @@
   const titleBlackGradientReversed = titleBlackGradient.replace(/(\d+)deg/, (match, angle) => {
     return `${(parseInt(angle, 10) + 180) % 360}deg`;
   });
-
-
-  // Load & sanitize the settings
-  const settings = loadSettings()
-  if (sanitizeSettings(settings)) {
-    saveSettings()
-  }
-
-  const bailData = {}
 
   // CSS code
   style.innerHTML = `
@@ -377,6 +387,9 @@
   </div>
   `
 
+  const eventTarget = new EventTarget()
+  const bailData = {}
+
   // Add root to DOM
   const userListWrapperElement = document.querySelector('.userlist-wrapper')
   userListWrapperElement.insertBefore(rootContainer, userListWrapperElement.firstChild)
@@ -478,10 +491,9 @@
     // Update if it is checked or not
     checkboxElement.checked = discountId in settings.discounts
     checkboxElement.addEventListener('change', () => {
-      setBailDiscount(discountId, checkboxElement.checked, false)
-      updateAllEstimateSpans()
-
-      saveSettings()
+      setBailDiscount(discountId, checkboxElement.checked, {
+        updateElement: false
+      })
     })
   }
 
@@ -493,6 +505,7 @@
 
   // Listen to custom events
   eventTarget.addEventListener(EVENT_ESTIMATE_UPDATED, onEstimateUpdated)
+  eventTarget.addEventListener(EVENT_DISCOUNTS_UPDATED, onDiscountsUpdated)
   eventTarget.addEventListener(EVENT_FILTER_RESULT_UPDATED, onFilterResultUpdated)
   eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_UPDATED, onHideNonMatchesUpdated)
 
@@ -502,25 +515,9 @@
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
 
-  function createDefaultSettings() {
-    return {
-      rootCollapsed: false,
-      autoScroll: false,
-      apiKey: '',
-      showApiKey: true,
-      discounts: {},
-      bailFilter: {
-        enabled: false,
-        hideNonMatches: false,
-        minBail: null,
-        maxBail: null,
-      },
-    }
-  }
-
   // TODO docs
   function loadSettings() {
-    return GM_getValue(STORAGE_KEY)
+    return GM_getValue(STORAGE_KEY, {})
   }
 
   /**
@@ -533,18 +530,19 @@
   }
 
   // TODO docs
-  function sanitizeSettings(defaultSettings) {
+  function sanitizeSettings() {
     let settingsModified = false
     // Add missing settings
-    for (const key in defaultSettings) {
+    for (const key in DEFAULT_SETTINGS) {
       if (!(key in settings)) {
-        settings[key] = defaultSettings[key]
+        const defaultValue = DEFAULT_SETTINGS[key]
+        settings[key] = defaultValue instanceof Object ? structuredClone(defaultValue) : defaultValue
         settingsModified = true
       }
     }
     // Remove old settings
     for (const key in settings) {
-      if (!(key in defaultSettings)) {
+      if (!(key in DEFAULT_SETTINGS)) {
         delete settings[key]
         settingsModified = true
       }
@@ -567,14 +565,14 @@
   }
 
   function updateAllEstimates() {
-    bailData.values().forEach(updateEstimate)
+    Object.values(bailData).forEach(updateEstimate)
   }
 
   function updateEstimate(userData) {
-    const prevEstimate = bailData.estimate
-    bailData.estimate = calculateEstimate(bailData.level, bailData.minutes)
-    if (prevEstimate !== bailData.estimate) {
-      bailData.estimateString = formatEstimate(bailData.estimate)
+    const prevEstimate = userData.estimate
+    userData.estimate = calculateEstimate(userData.level, userData.minutes)
+    if (prevEstimate !== userData.estimate || userData.estimateString === undefined) {
+      userData.estimateString = formatEstimate(userData.estimate)
       const event = new CustomEvent(EVENT_ESTIMATE_UPDATED, { detail: { userData: userData } })
       eventTarget.dispatchEvent(event)
     }
@@ -716,28 +714,45 @@
     return DOLLAR_FORMAT.format(estimate)
   }
 
-  /**
-   * Toggles the discount setting for a specific discount ID and updates the UI element if specified.
-   *
-   * @param {string} discountId - The unique identifier for the discount.
-   * @param {boolean} hasDiscount - Indicates whether the discount is active (true) or inactive (false).
-   * @param {boolean} updateElement - Determines whether the corresponding UI element should be updated.
-   * @return {boolean} Returns true if settings was updated, false if not.
-   */
-  function setBailDiscount(discountId, hasDiscount, updateElement) {
-    if (hasDiscount === discountId in settings.discounts) {
+  // TODO docs
+  function setBailDiscount(discountId, hasDiscount, options = {}) {
+    if (hasDiscount === (discountId in settings.discounts)) {
+      // Do nothing if set
       return false
     }
 
+    // Set options
+    const defaultOptions = {
+      updateElement: true,
+      saveSettings: true,
+      emitEvent: true,
+    }
+    options = { ...defaultOptions, ...options }
+
+
+    // Set in settings
     if (hasDiscount) {
       settings.discounts[discountId] = true
     }
     else {
       delete settings.discounts[discountId]
     }
-    if (updateElement) {
+
+    // Update the discount checkbox element
+    if (options.updateElement) {
       document.getElementById(`discount-${discountId}`).checked = hasDiscount
     }
+
+    // Emit event
+    if (options.emitEvent) {
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_DISCOUNTS_UPDATED))
+    }
+
+    // Save settings
+    if (options.saveSettings) {
+      saveSettings()
+    }
+
     return true
   }
 
@@ -765,14 +780,16 @@
         return new Error(json.error.error)
       }
 
-      let settingsModified = false
+      let discountsChanged = false
       for (const [discountId, discount] of Object.entries(DISCOUNTS)) {
-        settingsModified = setBailDiscount(discountId, discount.discountChecker(json), true) || settingsModified
+        discountsChanged = setBailDiscount(discountId, discount.discountChecker(json),  {
+          saveSettings: false,
+          emitEvent: false,
+        }) || discountsChanged
       }
 
-      if (settingsModified) {
-        GM_log("SETTINGS MODIFIED, UPDATING ESTIMATE SPANS")
-        updateAllEstimateSpans()
+      if (discountsChanged) {
+        eventTarget.dispatchEvent(new CustomEvent(EVENT_DISCOUNTS_UPDATED))
         saveSettings()
       }
 
@@ -858,7 +875,7 @@
 
   function findCheapestBail() { //TODO ensure being used
     let cheapest = null
-    for (const userData of bailData.values()) {
+    for (const userData of Object.values(bailData)) {
       if (userData.matchesFilters && (cheapest === null || userData.estimate < cheapest.estimate)) {
         cheapest = userData
       }
@@ -874,12 +891,16 @@
     updateFilterResult(event.detail.userData)
   }
 
+  function onDiscountsUpdated() {
+    updateAllEstimates()
+  }
+
   function onFilterResultUpdated(event) {
     updateBailVisibility(event.detail.userData)
   }
 
   function onHideNonMatchesUpdated() {
-    bailData.values().forEach(updateBailVisibility)
+    Object.values(bailData).forEach(updateBailVisibility)
   }
 
 })()
