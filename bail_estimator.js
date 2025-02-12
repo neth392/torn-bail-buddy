@@ -21,8 +21,12 @@
 
   const EVENT_ESTIMATE_UPDATED = 'bb-estimate-updated'
   const EVENT_DISCOUNTS_UPDATED = 'bb-discounts-updated'
+  const EVENT_FILTERS_UPDATED = 'bb-filters-updated'
   const EVENT_FILTER_RESULT_UPDATED = 'bb-filter-result-updated'
   const EVENT_HIDE_NON_MATCHES_UPDATED = 'bb-hide-non-matches-updated'
+
+  const REGEX_NON_NUMBER = /[^0-9.]/g
+  const REGEX_TIME = /(?:(\d+)h )?(\d+)m/
 
   const DISCOUNTS = Object.freeze({
     'administrative-law': Object.freeze({
@@ -51,28 +55,36 @@
     }),
   })
 
-  const FILTERS = Object.freeze({ // TODO implement filters
+  const FILTERS = Object.freeze({ // TODO implement more filters
     minBail: Object.freeze({
       displayName: 'Min Bail',
-      valueType: 'number',
+      inputType: 'text',
       htmlAttributes: Object.freeze({
-        type: 'number',
-        min: '0',
+        placeholder: 'Not Set'
       }),
+      eventName: 'input',
+      setInputValue: (inputElement, value) => inputElement.value = value,
+      parseInput: (inputElement) => {
+        sanitizeCurrencyInput(inputElement)
+        return inputElement.value === '' ? null : parseInt(inputElement.value)
+      },
       filterChecker: (userData, value) => value === null || userData.estimate >= value,
     }),
     maxBail: Object.freeze({
       displayName: 'Max Bail',
       inputType: 'text',
       htmlAttributes: Object.freeze({
-        type: 'number',
-        min: '0',
+        placeholder: 'Not Set'
       }),
+      eventName: 'input',
+      setInputValue: (inputElement, value) => inputElement.value = value,
+      parseInput: (inputElement) => {
+        sanitizeCurrencyInput(inputElement)
+        return inputElement.value === '' ? null : parseInt(inputElement.value)
+      },
       filterChecker: (userData, value) => value === null || userData.estimate <= value,
     })
   })
-
-  const TIME_REGEX = /(?:(\d+)h )?(\d+)m/
 
   const DOLLAR_FORMAT = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -87,7 +99,6 @@
     showApiKey: true,
     discounts: {},
     bailFilter: {
-      enabled: false,
       hideNonMatches: false,
       minBail: null,
       maxBail: null,
@@ -169,6 +180,10 @@
       gap: 4px;
     }
 
+    .bb-flex-gap2 {
+      gap: 2px;
+    }
+
     .bb-settings-container {
       align-items: flex-start !important;
       justify-content: flex-start !important;
@@ -241,12 +256,16 @@
     }
     
     .bb-input {
-      padding: 2px;
+      padding: 1px 2px 1px 2px;
       caret-color: var(--bbc-input-color);
       color: var(--bbc-input-color);
       background-color: var(--bbc-input-bg-color);
       border: 1px solid var(--bbc-input-border-color);
       border-radius: 4px;
+    }
+    
+    .bb-bail-filter {
+      justify-content: space-between;
     }
     
     #bb-root {
@@ -289,27 +308,38 @@
     }
 
     #bb-api-key-input {
-      min-width: 22%;
+      width: fit-content;
+      min-width: 16ch;
+      padding-right: 24px;
+    }
+    
+    #bb-api-key-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
     }
 
     #bb-api-key-hide-input-button {
+      position: absolute;
+      right: 2px;
+      top: 8px;
+      transform: translateY(-50%);
       cursor: pointer;
-      font-size: 16px;
+      font-size: 13px;
       padding: 0px;
       border: none;
-      text-align: center;
       line-height: 1;
-      margin-left: -4px;
+      z-index: 10;
     }
 
     #bb-api-key-validate-button {
       line-height: normal;
       height: auto;
-      font-size: 14px;
+      font-size: 13px;
     }
   
     #bb-api-key-validate-button-response {
-      line-height: 1;
+      line-height: normal;
       font-size: 14px;
     }
 
@@ -325,7 +355,7 @@
     </button>
     <div id="bb-content-divider" class="bb-horizontal-divider"></div>
     <div id="bb-content-container" class="bb-flex-column">
-      <div id="bb-api-key-container" class="bb-inline-flex-row bb-flex-gap4">
+      <div id="bb-api-key-container" class="bb-flex-row bb-flex-gap4">
         <label class="bb-settings-label">API Key</label>
         <span class="bb-tooltip-trigger" data-tooltip-id="api-key"></span>
         <div class="bb-tooltip-popup" data-tooltip-id="api-key">
@@ -333,8 +363,10 @@
           your browser and no requests are made to Torn's API without clicking Validate. Remember to click it after
           completing a bail reducing education course or joining/leaving a Law Firm job.
         </div>
-        <input id="bb-api-key-input" class="bb-input" placeholder="Enter your API key" value="${settings.apiKey}" />
-        <button id="bb-api-key-hide-input-button"></button>
+        <div id="bb-api-key-input-wrapper">
+          <input id="bb-api-key-input" class="bb-input" maxlength="16" size="16" placeholder="Enter your API key" value="${settings.apiKey}" />
+          <button id="bb-api-key-hide-input-button"></button>
+        </div>
         <button id="bb-api-key-validate-button" class="torn-btn">Validate</button>
         <span id="bb-api-key-validate-button-response"></span>
       </div>
@@ -349,7 +381,7 @@
             </div>
           </div>
         </div>
-        <div class="bb-flex-column bb-flex-gap4">
+        <div id="bb-bail-filters" class="bb-flex-column bb-flex-gap2">
           <div class="bb-inline-flex-row bb-flex-gap4">
             <span class="bb-settings-label">Bail Filter</span>
             <span class="bb-tooltip-trigger" data-tooltip-id="bail-filters"></span>
@@ -359,18 +391,8 @@
             </div>
           </div>
           <div class="bb-inline-flex-row bb-flex-gap4">
-            <input id="bb-filter-hide-non-matches" type="checkbox" checked=${settings.bailFilter.hideNonMatches} />
+            <input id="bb-filter-hide-non-matches" type="checkbox" ${settings.bailFilter.hideNonMatches ? "checked" : ""}/>
             <label for="bb-filter-hide-non-matches">Hide Non-Matches</label>
-          </div>
-          <div class="bb-inline-flex-row bb-flex-gap4">
-            <label for="bb-filter-min-bail">Max Bail</label>
-            <input id ="bb-filter-max-bail" class="bb-input bb-currency-input" type="number" 
-            value=${settings.bailFilter.maxBail} placeholder="Not Set" min="0"/>
-          </div>
-          <div class="bb-inline-flex-row bb-flex-gap4">
-            <label for="bb-filter-min-bail">Max Bail</label>
-            <input id ="bb-filter-max-bail" class="bb-input bb-currency-input" type="number" 
-            value=${settings.bailFilter.maxBail} placeholder="Not Set" min="0"/>
           </div>
         </div>
         <div class="bb-flex-column bb-flex-gap4">
@@ -406,9 +428,9 @@
   })
 
   // Functionality for all tooltips
-  document.querySelectorAll('.bb-tooltip-trigger').forEach((tooltipTrigger) => {
+  rootContainer.querySelectorAll('.bb-tooltip-trigger').forEach((tooltipTrigger) => {
     const tooltipId = tooltipTrigger.dataset.tooltipId
-    const getTooltipPopup = () => document.querySelector(`.bb-tooltip-popup[data-tooltip-id="${tooltipId}"]`)
+    const getTooltipPopup = () => rootContainer.querySelector(`.bb-tooltip-popup[data-tooltip-id="${tooltipId}"]`)
 
     // Show tooltip popup on hovering/clicking of tooltip trigger
     tooltipTrigger.addEventListener('mouseover', () => {
@@ -427,17 +449,6 @@
       const tooltipPopup = getTooltipPopup()
       tooltipPopup.style.top = `${event.pageY + 15}px`
       tooltipPopup.style.left = `${event.pageX + 15}px`
-    })
-  })
-
-  // Currency formatting
-  document.querySelectorAll('.bb-currency-input').forEach((currencyInput) => {
-    currencyInput.addEventListener('change', () => {
-      const inputValue = currencyInput.value
-      if (inputValue === '') {
-        return
-      }
-      currencyInput.value = DOLLAR_FORMAT.format(Number.parseFloat(inputValue)).toString()
     })
   })
 
@@ -497,8 +508,50 @@
     })
   }
 
+  // Filter hide non matches
+  const hideNonMatchesCheckbox = document.getElementById('bb-filter-hide-non-matches')
+  hideNonMatchesCheckbox.addEventListener('change', () => {
+    setHideNonMatches(hideNonMatchesCheckbox.checked)
+  })
+
   // Add the filter elements
-  // TODO
+  const filtersContainer = document.getElementById('bb-bail-filters')
+  for (const [filterId, filter] of Object.entries(FILTERS)) {
+    const filterElement = document.createElement('div')
+    filterElement.classList.add('bb-inline-flex-row', 'bb-flex-gap4', 'bb-bail-filter')
+
+    const inputElementId = `bb-filter-${filterId}`
+
+    // Filter label
+    const filterLabelElement = document.createElement('label')
+    filterLabelElement.textContent = filter.displayName
+    filterLabelElement.htmlFor = inputElementId
+
+    // Filter input
+    const filterInputElement = document.createElement('input')
+    filterInputElement.classList.add('bb-input')
+    filterInputElement.id = inputElementId
+    filterInputElement.type = filter.inputType
+
+    // noinspection JSValidateTypes
+    filter.setInputValue(filterInputElement, settings.bailFilter[filterId])
+
+    // Set HTML attributes
+    for (const [attributeName, attributeValue] of Object.entries(filter.htmlAttributes)) {
+      // noinspection JSCheckFunctionSignatures
+      filterInputElement.setAttribute(attributeName, attributeValue)
+    }
+
+    // Handle filter input
+    filterInputElement.addEventListener(filter.eventName, () => {
+      const inputValue = filter.parseInput(filterInputElement)
+      GM_log("INPUT VALUE: " + inputValue)
+      setBailFilter(filterId, inputValue)
+    })
+
+    filterElement.append(filterLabelElement, filterInputElement)
+    filtersContainer.appendChild(filterElement)
+  }
 
   // Modify the reason to include estimate
   document.querySelector('.reason.title-divider.divider-spiky').textContent = "Reason & Estimate"
@@ -506,6 +559,7 @@
   // Listen to custom events
   eventTarget.addEventListener(EVENT_ESTIMATE_UPDATED, onEstimateUpdated)
   eventTarget.addEventListener(EVENT_DISCOUNTS_UPDATED, onDiscountsUpdated)
+  eventTarget.addEventListener(EVENT_FILTERS_UPDATED, onFiltersUpdated)
   eventTarget.addEventListener(EVENT_FILTER_RESULT_UPDATED, onFilterResultUpdated)
   eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_UPDATED, onHideNonMatchesUpdated)
 
@@ -521,7 +575,7 @@
   }
 
   /**
-   * Saves settings to persistent storage using a predefined storage key.
+   * Saves settings to persistent storage.
    *
    * @return {void}
    */
@@ -573,8 +627,7 @@
     userData.estimate = calculateEstimate(userData.level, userData.minutes)
     if (prevEstimate !== userData.estimate || userData.estimateString === undefined) {
       userData.estimateString = formatEstimate(userData.estimate)
-      const event = new CustomEvent(EVENT_ESTIMATE_UPDATED, { detail: { userData: userData } })
-      eventTarget.dispatchEvent(event)
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_ESTIMATE_UPDATED, { detail: { userData: userData } }))
     }
   }
 
@@ -596,16 +649,23 @@
     }
   }
 
+  function updateAllFilterResults() {
+    Object.values(bailData).forEach(updateFilterResult)
+  }
+
   function updateFilterResult(userData) {
+    GM_log("updateFilterResult: " + userData.name)
     const lastResult = userData.filterResult
     userData.filterResult = true
     for (const [filterId, filter] of Object.entries(FILTERS)) {
       const filterValue = settings.bailFilter[filterId]
       if (!filter.filterChecker(userData, filterValue)) {
+        GM_log("FAILED: " + userData.name)
         userData.filterResult = false
         break
       }
     }
+    GM_log("RESULT: " + userData.name + " = " + userData.filterResult)
     if (lastResult !== userData.filterResult) {
       eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_UPDATED, { detail: { userData: userData } }))
     }
@@ -621,8 +681,7 @@
       return
     }
     settings.bailFilter.hideNonMatches = hideNonMatches
-    const event = new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED)
-    eventTarget.dispatchEvent(event)
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED))
     saveSettings()
   }
 
@@ -640,7 +699,7 @@
 
     // User level
     const levelElement = bailElement.querySelector('.info-wrap .level')
-    const level = parseFloat(levelElement.textContent.replace(/[^0-9]/g, '').trim())
+    const level = parseInt(levelElement.textContent.replace(/[^0-9]/g, '').trim())
 
     const userData = {
       id: id,
@@ -695,7 +754,7 @@
    * or -1 if the input format is invalid.
    */
   function timeToMinutes(timeString) {
-    const match = timeString.match(TIME_REGEX)
+    const match = timeString.match(REGEX_TIME)
     if (match) {
       const hours = parseInt(match[1] || '0', 10)
       const minutes = parseInt(match[2], 10)
@@ -756,7 +815,17 @@
     return true
   }
 
-
+  function setBailFilter(filterId, filterValue) {
+    const currentValue = settings.bailFilter[filterId]
+    GM_log("SET BAIL FILTER: filterId=" + filterId +", filterValue=" + filterValue)
+    if (currentValue === filterValue) {
+      GM_log("SKIP BAIL FILTER")
+      return
+    }
+    settings.bailFilter[filterId] = filterValue
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTERS_UPDATED))
+    saveSettings()
+  }
 
   /**
    * Validates the provided API key by sending a request to the API endpoint.
@@ -843,7 +912,7 @@
     const contentContainer = document.getElementById('bb-content-container')
     const contentDivider = document.getElementById('bb-content-divider')
     const rootToggleButton = document.getElementById('bb-root-toggle-button')
-    const rootToggleLabel = document.querySelector('.bb-root-toggle-label')
+    const rootToggleLabel = rootContainer.querySelector('.bb-root-toggle-label')
 
     if (settings.rootCollapsed) {
       contentContainer.classList.add('bb-collapsed')
@@ -876,30 +945,42 @@
   function findCheapestBail() { //TODO ensure being used
     let cheapest = null
     for (const userData of Object.values(bailData)) {
-      if (userData.matchesFilters && (cheapest === null || userData.estimate < cheapest.estimate)) {
+      if (userData.filterResult && (cheapest === null || userData.estimate < cheapest.estimate)) {
         cheapest = userData
       }
     }
     return cheapest
   }
 
+  function sanitizeCurrencyInput(inputElement) {
+    inputElement.value = inputElement.value.replace(REGEX_NON_NUMBER, '')
+  }
+
   // EVENT HANDLERS
 
   function onEstimateUpdated(event) {
-    GM_log("onEstimateUpdated: " + event.detail.userData.toString())
+    GM_log("onEstimateUpdated")
     updateEstimateSpan(event.detail.userData)
     updateFilterResult(event.detail.userData)
   }
 
   function onDiscountsUpdated() {
+    GM_log("onDiscountsUpdated")
     updateAllEstimates()
   }
 
+  function onFiltersUpdated() {
+    GM_log("onFiltersUpdated")
+    updateAllFilterResults()
+  }
+
   function onFilterResultUpdated(event) {
+    GM_log("onFilterResultUpdated")
     updateBailVisibility(event.detail.userData)
   }
 
   function onHideNonMatchesUpdated() {
+    GM_log("onHideNonMatchesUpdated")
     Object.values(bailData).forEach(updateBailVisibility)
   }
 
