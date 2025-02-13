@@ -13,7 +13,11 @@
 // @grant    GM_log
 // ==/UserScript==
 
+// NOTE FOR LATER: URL is https://www.torn.com/jailview.php#start=50
+// The #start=50 is important
+
 (function() {
+
   // Project constants
   const PROJECT_NAME = 'Bail Buddy'
   const STORAGE_KEY = 'settings'
@@ -21,47 +25,48 @@
 
   const EVENT_ESTIMATE_UPDATED = 'bb-estimate-updated'
   const EVENT_DISCOUNTS_UPDATED = 'bb-discounts-updated'
-  const EVENT_FILTERS_UPDATED = 'bb-filters-updated'
-  const EVENT_FILTER_RESULT_UPDATED = 'bb-filter-result-updated'
-  const EVENT_HIDE_NON_MATCHES_UPDATED = 'bb-hide-non-matches-updated'
+  const EVENT_FILTERS_CHANGED = 'bb-filters-changed'
+  const EVENT_FILTER_RESULT_CHANGED = 'bb-filter-result-changed'
+  const EVENT_HIDE_NON_MATCHES_CHANGED = 'bb-hide-non-matches-changed'
+  const EVENT_SORTER_CHANGED = 'bb-sorter-changed'
 
   const REGEX_NON_NUMBER = /[^0-9.]/g
   const REGEX_TIME = /(?:(\d+)h )?(\d+)m/
 
-  const DISCOUNTS = Object.freeze({
-    'administrative-law': Object.freeze({
+  const DISCOUNTS = {
+    'administrative-law': {
       displayName: 'Administrative Law',
       category: 'Education',
       amount: .05,
       discountChecker: (response) => response.education_completed.includes(93),
-    }),
-    'use-of-force': Object.freeze({
+    },
+    'use-of-force': {
       displayName: 'Use Of Force In Int\'l Law',
       category: 'Education',
       amount: .1,
       discountChecker: (response) => response.education_completed.includes(98),
-    }),
-    'bachelor-law': Object.freeze({
+    },
+    'bachelor-law': {
       displayName: 'Bachelor Of Law',
       category: 'Education',
       amount: .5,
       discountChecker: (response) => response.education_completed.includes(102),
-    }),
-    'law-firm-job': Object.freeze({
+    },
+    'law-firm-job': {
       displayName: 'Law Firm Job',
       category: 'Job',
       amount: .5,
       discountChecker: (response) => response.job.company_type === 2 ,
-    }),
-  })
+    },
+  }
 
-  const FILTERS = Object.freeze({ // TODO implement more filters
-    minBail: Object.freeze({
+  const FILTERS = { // TODO implement more filters
+    minBail: {
       displayName: 'Min Bail',
       inputType: 'text',
-      htmlAttributes: Object.freeze({
+      htmlAttributes: {
         placeholder: 'Not Set'
-      }),
+      },
       eventName: 'input',
       setInputValue: (inputElement, value) => inputElement.value = value,
       parseInput: (inputElement) => {
@@ -69,13 +74,13 @@
         return inputElement.value === '' ? null : parseInt(inputElement.value)
       },
       filterChecker: (userData, value) => value === null || userData.estimate >= value,
-    }),
-    maxBail: Object.freeze({
+    },
+    maxBail: {
       displayName: 'Max Bail',
       inputType: 'text',
-      htmlAttributes: Object.freeze({
+      htmlAttributes: {
         placeholder: 'Not Set'
-      }),
+      },
       eventName: 'input',
       setInputValue: (inputElement, value) => inputElement.value = value,
       parseInput: (inputElement) => {
@@ -83,8 +88,36 @@
         return inputElement.value === '' ? null : parseInt(inputElement.value)
       },
       filterChecker: (userData, value) => value === null || userData.estimate <= value,
-    })
-  })
+    }
+  }
+
+  const DEFAULT_TORN_SORTER = 'time-descending'
+  const SORTERS = {
+    'bail-ascending': {
+      displayName: 'Bail Ascending',
+      sorterFunction: (a, b) => a.estimate - b.estimate,
+    },
+    'bail-descending': {
+      displayName: 'Bail Descending',
+      sorterFunction: (a, b) => b.estimate - a.estimate,
+    },
+    'time-ascending': {
+      displayName: 'Time Ascending',
+      sorterFunction: (a, b) => a.minutes - b.minutes,
+    },
+    'time-descending': {
+      displayName: 'Time Descending',
+      sorterFunction: (a, b) => b.minutes - a.minutes,
+    },
+    'level-ascending': {
+      displayName: 'Level Ascending',
+      sorterFunction: (a, b) => a.level - b.level,
+    },
+    'level-descending': {
+      displayName: 'Level Descending',
+      sorterFunction: (a, b) => b.level - a.level,
+    },
+  }
 
   const DOLLAR_FORMAT = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -103,6 +136,7 @@
       minBail: null,
       maxBail: null,
     },
+    sorter: DEFAULT_TORN_SORTER,
   }
 
   // Load & sanitize the settings
@@ -264,8 +298,19 @@
       border-radius: 4px;
     }
     
+    .bb-select {
+      color: var(--bbc-input-color);
+      background-color: var(--bbc-input-bg-color);
+      border: 1px solid var(--bbc-input-border-color);
+      border-radius: 4px;
+    }
+    
     .bb-bail-filter {
-      justify-content: space-between;
+      justify-content: space-between !important;
+    }
+    
+    .bb-bail-filter input {
+      max-width: 10ch;
     }
     
     #bb-root {
@@ -280,6 +325,7 @@
       background-image: ${titleBlackGradient};
       border-radius: 5px;
       padding: 2px 5px 2px 5px;
+      margin-top: 8px;
     }
 
     #bb-root-toggle-button:hover {
@@ -342,9 +388,13 @@
       line-height: normal;
       font-size: 14px;
     }
+    
+    #bb-sort-select {
+      max-width: 18ch;
+    }
 
   `
-
+  
   document.head.appendChild(style)
 
   const rootContainer = document.createElement('div')
@@ -403,6 +453,14 @@
               Defines how the bail list below is sorted. Default means Torn's default sorting.
             </div>
           </div>
+          <select name="bb-sort" id="bb-sort-select" class="bb-select"></select>
+        </div class="bb-flex-column bb-flex-gap4">
+          <div class="bb-inline-flex-row bb-flex-gap4">
+            <span class="bb-settings-label">Misc.</span>
+            <span class="bb-tooltip-trigger" data-tooltip-id="misc-settings"></span>
+            <div class="bb-tooltip-popup" data-tooltip-id="misc-settings">
+              Miscellaneous settings.
+            </div>
         </div>
       </div>
     </div>
@@ -518,7 +576,7 @@
   const filtersContainer = document.getElementById('bb-bail-filters')
   for (const [filterId, filter] of Object.entries(FILTERS)) {
     const filterElement = document.createElement('div')
-    filterElement.classList.add('bb-inline-flex-row', 'bb-flex-gap4', 'bb-bail-filter')
+    filterElement.classList.add('bb-bail-filter', 'bb-inline-flex-row', 'bb-flex-gap4')
 
     const inputElementId = `bb-filter-${filterId}`
 
@@ -545,7 +603,6 @@
     // Handle filter input
     filterInputElement.addEventListener(filter.eventName, () => {
       const inputValue = filter.parseInput(filterInputElement)
-      GM_log("INPUT VALUE: " + inputValue)
       setBailFilter(filterId, inputValue)
     })
 
@@ -553,15 +610,34 @@
     filtersContainer.appendChild(filterElement)
   }
 
+  // Sorting
+  const bbSortSelectElement = document.getElementById('bb-sort-select')
+  for (const [sorterId, sorter] of Object.entries(SORTERS)) {
+    const sorterOptionElement = document.createElement('option')
+    sorterOptionElement.id = `bb-sorter-${sorterId}`
+    sorterOptionElement.value = sorterId
+    sorterOptionElement.label = sorter.displayName
+    if (DEFAULT_TORN_SORTER === sorterId) {
+      sorterOptionElement.label += ' (Default)'
+    }
+    if (settings.sorter === sorterId || (settings.sorter == null && sorterId === DEFAULT_TORN_SORTER)) {
+      sorterOptionElement.selected = true
+    }
+    bbSortSelectElement.appendChild(sorterOptionElement)
+  }
+
+  bbSortSelectElement.addEventListener('change', () => setSorter(bbSortSelectElement.value))
+
   // Modify the reason to include estimate
   document.querySelector('.reason.title-divider.divider-spiky').textContent = "Reason & Estimate"
 
   // Listen to custom events
   eventTarget.addEventListener(EVENT_ESTIMATE_UPDATED, onEstimateUpdated)
   eventTarget.addEventListener(EVENT_DISCOUNTS_UPDATED, onDiscountsUpdated)
-  eventTarget.addEventListener(EVENT_FILTERS_UPDATED, onFiltersUpdated)
-  eventTarget.addEventListener(EVENT_FILTER_RESULT_UPDATED, onFilterResultUpdated)
-  eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_UPDATED, onHideNonMatchesUpdated)
+  eventTarget.addEventListener(EVENT_FILTERS_CHANGED, onFiltersUpdated)
+  eventTarget.addEventListener(EVENT_FILTER_RESULT_CHANGED, onFilterResultUpdated)
+  eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_CHANGED, onHideNonMatchesUpdated)
+  eventTarget.addEventListener(EVENT_SORTER_CHANGED, onSorterChanged)
 
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
@@ -606,16 +682,22 @@
 
   // TODO updated docs
   function listMutationCallback(mutationList) {
-    mutationList
+    const bailElements = mutationList
       .filter(mutation => mutation.type === 'childList')
       .flatMap(mutation => Array.from(mutation.addedNodes))
       .filter(node => node instanceof Element && node.parentNode instanceof Element)
+      .filter(node => !('bbExtracted' in node.dataset))
       .filter(element => element.parentNode.classList.contains('user-info-list-wrap'))
-      .forEach(element => {
+      bailElements.forEach(element => {
         const userData = extractUserData(element)
+        element.dataset.bbId = userData.id
         bailData[userData.id] = userData
         updateEstimate(userData)
       });
+
+      if (bailElements.length > 0 && settings.sorter !== DEFAULT_TORN_SORTER) {
+        sortBailList()
+      }
   }
 
   function updateAllEstimates() {
@@ -654,20 +736,17 @@
   }
 
   function updateFilterResult(userData) {
-    GM_log("updateFilterResult: " + userData.name)
     const lastResult = userData.filterResult
     userData.filterResult = true
     for (const [filterId, filter] of Object.entries(FILTERS)) {
       const filterValue = settings.bailFilter[filterId]
       if (!filter.filterChecker(userData, filterValue)) {
-        GM_log("FAILED: " + userData.name)
         userData.filterResult = false
         break
       }
     }
-    GM_log("RESULT: " + userData.name + " = " + userData.filterResult)
     if (lastResult !== userData.filterResult) {
-      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_UPDATED, { detail: { userData: userData } }))
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_CHANGED, { detail: { userData: userData } }))
     }
   }
 
@@ -681,7 +760,7 @@
       return
     }
     settings.bailFilter.hideNonMatches = hideNonMatches
-    eventTarget.dispatchEvent(new CustomEvent(EVENT_HIDE_NON_MATCHES_UPDATED))
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_HIDE_NON_MATCHES_CHANGED))
     saveSettings()
   }
 
@@ -707,9 +786,10 @@
       minutes: minutes,
       level: level,
       bailElement: bailElement,
+      originalOrder: [...bailElement.parentElement.children].indexOf(bailElement),
     }
 
-    GM_log("EXTRACTED: " + name)
+    bailElement.dataset.bbExtracted = "true"
 
     return userData
   }
@@ -823,7 +903,7 @@
       return
     }
     settings.bailFilter[filterId] = filterValue
-    eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTERS_UPDATED))
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTERS_CHANGED))
     saveSettings()
   }
 
@@ -942,6 +1022,36 @@
   }
 
 
+  function setSorter(sorterId) {
+    if (settings.sorter === sorterId) {
+      GM_log("SKIP setSorter")
+      return
+    }
+    GM_log("SET SORTER")
+    settings.sorter = sorterId
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_SORTER_CHANGED))
+    saveSettings()
+  }
+
+  function sortBailList() {
+    const sorter = SORTERS[settings.sorter == null ? DEFAULT_TORN_SORTER : settings.sorter]
+    const bailList = document.querySelector('.user-info-list-wrap')
+
+    // const arr = Array.from(bailList.children)
+    // GM_log("sortBailList size = " + arr.length)
+    // arr.sort(sorter.sorterFunction)
+    //
+    // for (const element in arr) {
+    //   GM_log("Append: " + element.)
+    //   bailList.appendChild(element)
+    // }
+
+    Array.from(bailList.children)
+      .map(element => bailData[element.dataset.bbId])
+      .sort(sorter.sorterFunction)
+      .forEach(userData => bailList.appendChild(userData.bailElement))
+  }
+
   function findCheapestBail() { //TODO ensure being used
     let cheapest = null
     for (const userData of Object.values(bailData)) {
@@ -959,29 +1069,29 @@
   // EVENT HANDLERS
 
   function onEstimateUpdated(event) {
-    GM_log("onEstimateUpdated")
     updateEstimateSpan(event.detail.userData)
     updateFilterResult(event.detail.userData)
   }
 
   function onDiscountsUpdated() {
-    GM_log("onDiscountsUpdated")
     updateAllEstimates()
   }
 
   function onFiltersUpdated() {
-    GM_log("onFiltersUpdated")
     updateAllFilterResults()
   }
 
   function onFilterResultUpdated(event) {
-    GM_log("onFilterResultUpdated")
     updateBailVisibility(event.detail.userData)
   }
 
   function onHideNonMatchesUpdated() {
-    GM_log("onHideNonMatchesUpdated")
     Object.values(bailData).forEach(updateBailVisibility)
+  }
+
+  function onSorterChanged() {
+    GM_log("SORT BAIL LIST")
+    sortBailList()
   }
 
 })()
