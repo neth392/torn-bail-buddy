@@ -63,6 +63,7 @@
   const FILTERS = { // TODO implement more filters
     minBail: {
       displayName: 'Min Bail',
+      description: 'The maximum bail amount, any bail lesser is ignored. No value means no minimum bail.',
       inputType: 'text',
       htmlAttributes: {
         placeholder: 'Not Set'
@@ -77,6 +78,7 @@
     },
     maxBail: {
       displayName: 'Max Bail',
+      description: 'The maximum bail amount, any bail greater is ignored. No value means no maximum bail.',
       inputType: 'text',
       htmlAttributes: {
         placeholder: 'Not Set'
@@ -88,7 +90,37 @@
         return inputElement.value === '' ? null : parseInt(inputElement.value)
       },
       filterChecker: (userData, value) => value === null || userData.estimate <= value,
-    }
+    },
+    hideOnlinePlayers: {
+      displayName: 'Hide Online',
+      description: 'If checked, players that are online are ignored.',
+      inputType: 'checkbox',
+      htmlAttributes: {},
+      eventName: 'change',
+      setInputValue: (inputElement, value) => inputElement.checked = value,
+      parseInput: (inputElement) => inputElement.checked,
+      filterChecker: (userData, value) => !(value && userData.online),
+    },
+    hideIdlePlayers: {
+      displayName: 'Hide Idle',
+      description: 'If checked, players that are idle are ignored.',
+      inputType: 'checkbox',
+      htmlAttributes: {},
+      eventName: 'change',
+      setInputValue: (inputElement, value) => inputElement.checked = value,
+      parseInput: (inputElement) => inputElement.checked,
+      filterChecker: (userData, value) => !(value && userData.idle),
+    },
+    hideOfflinePlayers: {
+      displayName: 'Hide Offline',
+      description: 'If checked, players that are offline are ignored.',
+      inputType: 'checkbox',
+      htmlAttributes: {},
+      eventName: 'change',
+      setInputValue: (inputElement, value) => inputElement.checked = value,
+      parseInput: (inputElement) => inputElement.checked,
+      filterChecker: (userData, value) => !(value && userData.offline),
+    },
   }
 
   const DEFAULT_TORN_SORTER = 'time-descending'
@@ -126,6 +158,7 @@
   })
 
   const DEFAULT_SETTINGS = {
+    settingsVersion: 1.02,
     rootCollapsed: false,
     autoScroll: false,
     apiKey: '',
@@ -135,8 +168,12 @@
       hideNonMatches: false,
       minBail: null,
       maxBail: null,
+      hideOnlinePlayers: false,
+      hideIdlePlayers: false,
+      hideOfflinePlayers: false,
     },
     sorter: DEFAULT_TORN_SORTER,
+    disablePagination: true,
   }
 
   // Load & sanitize the settings
@@ -306,7 +343,7 @@
     }
     
     .bb-bail-filter {
-      justify-content: space-between !important;
+     /* TODO remove? */
     }
     
     .bb-bail-filter input {
@@ -394,6 +431,14 @@
     }
 
   `
+
+  let filtersTooltipText = `
+    Any bail not within the scope of the configured filters will be ignored by the bail sniper. You can also
+    optionally hide them from the list by enabling <strong>Hide Non-Matches</strong>.<br><br>
+  `
+  for (const filter of Object.values(FILTERS)) {
+    filtersTooltipText += `<strong>${filter.displayName}</strong> - ${filter.description}<br><br>`
+  }
   
   document.head.appendChild(style)
 
@@ -436,8 +481,7 @@
             <span class="bb-settings-label">Bail Filter</span>
             <span class="bb-tooltip-trigger" data-tooltip-id="bail-filters"></span>
             <div class="bb-tooltip-popup" data-tooltip-id="bail-filters">
-              Any bail not within the scope of the configured filters will be ignored by the bail sniper. You can also
-              optionally hide them from the list by enabling 'Hide Non-Matches'.
+              ${filtersTooltipText}
             </div>
           </div>
           <div class="bb-inline-flex-row bb-flex-gap4">
@@ -455,12 +499,19 @@
           </div>
           <select name="bb-sort" id="bb-sort-select" class="bb-select"></select>
         </div class="bb-flex-column bb-flex-gap4">
+        <div class="bb-flex-column bb-flex-gap4">
           <div class="bb-inline-flex-row bb-flex-gap4">
             <span class="bb-settings-label">Misc.</span>
             <span class="bb-tooltip-trigger" data-tooltip-id="misc-settings"></span>
             <div class="bb-tooltip-popup" data-tooltip-id="misc-settings">
-              Miscellaneous settings.
+              <strong>Disable Pages</strong> - Disables the pagination of the baillist. This ensures that all jailed users
+              are present on this page.
             </div>
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
+              <input id="bb-disable-pagination-checkbox" type="checkbox" ${settings.disablePagination ? "checked" : ""} />
+              <label for="bb-disable-pagination-checkbox">Disable Pages</label> 
+          </div>
         </div>
       </div>
     </div>
@@ -504,9 +555,41 @@
 
     // Tooltip positioning
     tooltipTrigger.addEventListener('mousemove', (event) => {
-      const tooltipPopup = getTooltipPopup()
-      tooltipPopup.style.top = `${event.pageY + 15}px`
-      tooltipPopup.style.left = `${event.pageX + 15}px`
+      const tooltipPopup = getTooltipPopup();
+      const cursorX = event.pageX;
+      const cursorY = event.pageY;
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const tooltipWidth = tooltipPopup.offsetWidth;
+      const tooltipHeight = tooltipPopup.offsetHeight;
+
+      const windowCenter = windowWidth / 2;
+      let left, top;
+
+      if (cursorX < windowCenter) {
+        left = cursorX + 15;
+        if (left + tooltipWidth > windowWidth) {
+          left = windowWidth - tooltipWidth - 15;
+        }
+      } else {
+        left = cursorX - tooltipWidth - 15;
+        if (left < 0) {
+          left = 15;
+        }
+      }
+
+      top = cursorY + 15;
+
+      if (top + tooltipHeight > windowHeight) {
+        top = windowHeight - tooltipHeight - 15;
+      }
+
+      if (top < 0) {
+        top = 15;
+      }
+
+      tooltipPopup.style.left = `${left}px`;
+      tooltipPopup.style.top = `${top}px`;
     })
   })
 
@@ -606,7 +689,7 @@
       setBailFilter(filterId, inputValue)
     })
 
-    filterElement.append(filterLabelElement, filterInputElement)
+    filterElement.append(filterInputElement, filterLabelElement)
     filtersContainer.appendChild(filterElement)
   }
 
@@ -661,23 +744,37 @@
 
   // TODO docs
   function sanitizeSettings() {
-    let settingsModified = false
-    // Add missing settings
-    for (const key in DEFAULT_SETTINGS) {
-      if (!(key in settings)) {
-        const defaultValue = DEFAULT_SETTINGS[key]
-        settings[key] = defaultValue instanceof Object ? structuredClone(defaultValue) : defaultValue
-        settingsModified = true
+    // Only sanitize if settings version hasn't changed.
+    if (settings.settingsVersion === DEFAULT_SETTINGS.settingsVersion) {
+      return false
+    }
+    // Sanitize the settings
+    _sanitizeObjectSetting(settings, DEFAULT_SETTINGS)
+    // Update the version
+    settings.settingsVersion = DEFAULT_SETTINGS.settingsVersion
+    return true
+  }
+
+  function _sanitizeObjectSetting(got, expected) {
+    // Delete keys that shouldn't exist
+    for (const key in got) {
+      if (!(key in expected)) {
+        delete got[key]
       }
     }
-    // Remove old settings
-    for (const key in settings) {
-      if (!(key in DEFAULT_SETTINGS)) {
-        delete settings[key]
-        settingsModified = true
+    // Add missing keys
+    for (const key in expected) {
+      if (!(key in got)) {
+        got[key] = expected[key]
       }
     }
-    return settingsModified
+    // Handle nested objects of current
+    for (const [key, value] of Object.entries(got)) {
+      if (value instanceof Object) {
+        const expectedValue = expected[key]
+        _sanitizeObjectSetting(value, expectedValue)
+      }
+    }
   }
 
   // TODO updated docs
@@ -780,6 +877,12 @@
     const levelElement = bailElement.querySelector('.info-wrap .level')
     const level = parseInt(levelElement.textContent.replace(/[^0-9]/g, '').trim())
 
+    // Online status
+    const userOnlineStatus = bailElement.querySelector('.iconShow')
+    const online = userOnlineStatus.title.includes('Online')
+    const offline = userOnlineStatus.title.includes('Offline')
+    const idle = userOnlineStatus.title.includes('Idle')
+
     const userData = {
       id: id,
       name: name,
@@ -787,6 +890,9 @@
       level: level,
       bailElement: bailElement,
       originalOrder: [...bailElement.parentElement.children].indexOf(bailElement),
+      online: online,
+      offline: offline,
+      idle: idle,
     }
 
     bailElement.dataset.bbExtracted = "true"
