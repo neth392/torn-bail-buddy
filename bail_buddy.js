@@ -16,6 +16,40 @@
 // NOTE FOR LATER: URL is https://www.torn.com/jailview.php#start=50
 // The #start=50 is important
 
+
+// Example request of when there is pagination (from the 2nd page)
+// When there are n pages "pagination" is not in data. IMPORTANT TODO (TODO so I see this later)
+//{
+//     "total": 2,
+//     "success": true,
+//     "data": {
+//         "info_text": "<div class=\"info-msg-cont  border-round m-top10\">\r\n\t\t<div class=\"info-msg border-round\">\r\n\t\t\t<i class=\"info-icon\"></i>\r\n\t\t\t<div class=\"delimiter\">\r\n\t\t\t\t<div class=\"msg right-round\" role='alert' aria-live='polite'>\r\n\t\t\t\t\tYou take a trip down to the jail and take a look at the captives.\r\n\t\t\t\t</div>\r\n\t\t\t</div>\r\n\t\t</div>\r\n\t</div><hr class=\"page-head-delimiter m-top10 m-bottom10 \" />",
+//         "is_player_exist": true,
+//         "pagination": "<div class=\"gallery-wrapper pagination m-top10 \"> <div class=\"pagination-l\"></div><a href='#'><i class=\"pagination-left\"></i></a>\n        <a  page=\"1\" class=\"page-number first t-gray-3\" href=\"#\" style=\"display: inline-block;\">\n            <span class=\"left-end\"></span>\n            <span class=\"page-nb\">1</span>\n            <span class=\"right-end\"></span>\n        </a>\n        <span class=\"points t-gray-3\">...</span>\n\t\t\t\t<a page=\"1\" class=\"page-number\" href='#'>\n\t\t\t\t    <span class=\"left-end\"></span>\n\t\t\t\t    <span class=\"page-nb\">1</span>\n\t\t\t\t    <span class=\"right-end\"></span>\n                </a>\n\t\t\t\t<a page=\"2\" class=\"page-number active\">\n\t\t\t\t    <span class=\"left-end\"></span>\n\t\t\t\t    <span class=\"page-nb\">2</span>\n\t\t\t\t    <span class=\"right-end\"></span>\n\t\t\t\t</a>\n        <span class=\"points t-gray-3\">...</span>\n        <a page=\"2\" class=\"page-number last t-gray-3\" href=\"#start=50\" style=\"display: inline-block;\">\n            <span class=\"left-end\"></span>\n            <span class=\"page-nb\">2</span>\n            <span class=\"right-end\"></span>\n        </a><a class=\"disable\"><i class=\"pagination-right disable\"></i></a><div class=\"pagination-r\"></div></div>\n<div class=\"clear\"></div>",
+//         "is_user_text_name": false,
+//         "players": [
+//             {
+//                 "online_offline": "<ul id=\"iconTray\" class=\"big svg singleicon\" style=\"display: inline-block;\"><li id=\"icon1___4df87b69\" class=\"iconShow\" title=\"&lt;b&gt;Online&lt;/b&gt;\" style=\"\"></li></ul>",
+//                 "print_tag": "<a class=\"user faction platinum\" rel=nofollow href=/factions.php?step=profile&ID=13851 ><img src=\"https://factiontags.torn.com/13851-63379.png\" border=\"0\" alt=\"NUKE\" title=\"NUKE\" style=\"opacity:0.6;filter:alpha(opacity=60)\" /></a>",
+//                 "print_name": "<a class=\"user name \" data-placeholder=\"RedFireGhost [2552257]\" href=\"/profiles.php?XID=2552257\" title=\"RedFireGhost [2552257]\"  ><div class=\"honor-text-wrap default big\"><img srcset=\"/images/honors/267/f.png 1x, /images/honors/267/f@2x.png 2x, /images/honors/267/f@3x.png 3x, /images/honors/267/f@4x.png 4x\" src=\"/images/honors/267/f.png\" border=\"0\" alt=\"RedFireGhost [2552257]\"/> <span class=\"honor-text honor-text-svg\"><span data-char=\"R\"></span><span data-char=\"e\"></span><span data-char=\"d\"></span><span data-char=\"F\"></span><span data-char=\"i\"></span><span data-char=\"r\"></span><span data-char=\"e\"></span><span data-char=\"G\"></span><span data-char=\"h\"></span><span data-char=\"o\"></span><span data-char=\"s\"></span><span data-char=\"t\"></span></span><span class=\"honor-text\">RedFireGhost</span></div></a>",
+//                 "time": "41m ",
+//                 "level": "88",
+//                 "jailreason": "Running an illegal street game",
+//                 "user_id": "2552257"
+//             },
+//             {
+//                 "online_offline": "<ul id=\"iconTray\" class=\"big svg singleicon\" style=\"display: inline-block;\"><li id=\"icon1___1bf52dff\" class=\"iconShow\" title=\"&lt;b&gt;Online&lt;/b&gt;\" style=\"\"></li></ul>",
+//                 "print_tag": "<a class=\"user faction platinum\" rel=nofollow href=/factions.php?step=profile&ID=49319 ><img src=\"https://factiontags.torn.com/49319-63467.png\" border=\"0\" alt=\"\" title=\"\" style=\"opacity:0.6;filter:alpha(opacity=60)\" /></a>",
+//                 "print_name": "<a class=\"user name \" data-placeholder=\"Drenaz [3365724]\" href=\"/profiles.php?XID=3365724\" title=\"Drenaz [3365724]\"  ><div class=\"honor-text-wrap default big\"><img srcset=\"/images/honors/251/f.png 1x, /images/honors/251/f@2x.png 2x, /images/honors/251/f@3x.png 3x, /images/honors/251/f@4x.png 4x\" src=\"/images/honors/251/f.png\" border=\"0\" alt=\"Drenaz [3365724]\"/> <span class=\"honor-text honor-text-svg\"><span data-char=\"D\"></span><span data-char=\"r\"></span><span data-char=\"e\"></span><span data-char=\"n\"></span><span data-char=\"a\"></span><span data-char=\"z\"></span></span><span class=\"honor-text\">Drenaz</span></div></a>",
+//                 "time": "38m ",
+//                 "level": "31",
+//                 "jailreason": "Suspected abduction",
+//                 "user_id": "3365724"
+//             }
+//         ]
+//     }
+// }
+
 (function() {
 
   // Project constants
@@ -151,6 +185,10 @@
       displayName: 'Level Descending',
       sorterFunction: (a, b) => b.level - a.level,
     },
+    'reason': {
+      displayName: 'Reason',
+      sorterFunction: (a, b) => a.reasonText.localeCompare(b.reasonText),
+    }
   }
 
   const DOLLAR_FORMAT = new Intl.NumberFormat('en-US', {
@@ -821,6 +859,7 @@
         element.dataset.bbId = userData.id
         bailData[userData.id] = userData
         updateEstimate(userData)
+        updateReasonVisibility(userData)
       });
 
       if (bailElements.length > 0 && settings.sorter !== DEFAULT_TORN_SORTER) {
@@ -928,7 +967,11 @@
     const idle = userOnlineStatus.title.includes('Idle')
 
     // Reason
-    const reason = getReasonElement(bailElement).textContent.trim()
+    const reasonElement = getReasonElement(bailElement)
+    const reasonText = reasonElement.textContent
+    const reasonParts = Array.from(reasonElement.childNodes)
+      .filter(node => node.nodeType === Node.TEXT_NODE)
+      .map(node => node.textContent)
 
     return {
       id: id,
@@ -939,7 +982,8 @@
       online: online,
       offline: offline,
       idle: idle,
-      reason: reason,
+      reasonText: reasonText,
+      reasonParts: reasonParts,
     }
   }
 
@@ -1244,14 +1288,16 @@
 
   function updateReasonVisibility(userData) {
     const reasonElement = getReasonElement(userData.bailElement)
-    reasonElement.childNodes.forEach(node => {
-      if (node.nodeType === Node.TEXT_NODE) { // Hide the reason
-        node.textContent = settings.hideReasons ?  '' : userData.reason
+    let reasonPart = 0
+    for (const childNode of Array.from(reasonElement.childNodes)) {
+      if (childNode.nodeType === Node.TEXT_NODE) { // Hide the reason
+        childNode.textContent = settings.hideReasons ?  '' : userData.reasonParts[reasonPart]
+        reasonPart++
       }
-      else if (node.nodeName === 'A' || node.nodeName === 'BR') { // Hide any player name links in the reason
-        node.style.display = settings.hideReasons ? 'none' : 'inline'
+      else if (childNode.nodeName === 'A' || childNode.nodeName === 'BR') { // Hide any player name links in the reason
+        childNode.style.display = settings.hideReasons ? 'none' : 'inline'
       }
-    })
+    }
   }
 
 
