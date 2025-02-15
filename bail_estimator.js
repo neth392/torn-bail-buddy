@@ -29,6 +29,8 @@
   const EVENT_FILTER_RESULT_CHANGED = 'bb-filter-result-changed'
   const EVENT_HIDE_NON_MATCHES_CHANGED = 'bb-hide-non-matches-changed'
   const EVENT_SORTER_CHANGED = 'bb-sorter-changed'
+  const EVENT_DISPLAY_ESTIMATES_CHANGED = 'bb-display-estimates-changed'
+  const EVENT_HIDE_REASONS_CHANGED = 'bb-hide-reasons-changed'
 
   const REGEX_NON_NUMBER = /[^0-9.]/g
   const REGEX_TIME = /(?:(\d+)h )?(\d+)m/
@@ -174,6 +176,8 @@
     },
     sorter: DEFAULT_TORN_SORTER,
     disablePagination: true,
+    displayEstimates: true,
+    hideReasons: false,
   }
 
   // Load & sanitize the settings
@@ -509,6 +513,14 @@
             </div>
           </div>
           <div class="bb-inline-flex-row bb-flex-gap4">
+              <input id="bb-display-bail-estimates-checkbox" type="checkbox" ${settings.displayEstimates ? "checked" : ""} />
+              <label for="bb-display-bail-estimates-checkbox">Display Estimates</label> 
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
+              <input id="bb-hide-reasons-checkbox" type="checkbox" ${settings.hideReasons ? "checked" : ""} />
+              <label for="bb-hide-reasons-checkbox">Hide Reasons</label> 
+          </div>
+          <div class="bb-inline-flex-row bb-flex-gap4">
               <input id="bb-disable-pagination-checkbox" type="checkbox" ${settings.disablePagination ? "checked" : ""} />
               <label for="bb-disable-pagination-checkbox">Disable Pages</label> 
           </div>
@@ -711,8 +723,19 @@
 
   bbSortSelectElement.addEventListener('change', () => setSorter(bbSortSelectElement.value))
 
-  // Modify the reason to include estimate
-  document.querySelector('.reason.title-divider.divider-spiky').textContent = "Reason & Estimate"
+  // Misc Settings
+  const displayBailEstimatesCheckbox = document.getElementById('bb-display-bail-estimates-checkbox')
+  displayBailEstimatesCheckbox.addEventListener('change', () => {
+    setEstimateVisibility(displayBailEstimatesCheckbox.checked)
+  })
+
+  const hideReasonsCheckbox = document.getElementById('bb-hide-reasons-checkbox')
+  hideReasonsCheckbox.addEventListener('change', () => {
+    setHideReasons(hideReasonsCheckbox.checked)
+  })
+
+  // Update reason title
+  updateReasonTitle()
 
   // Listen to custom events
   eventTarget.addEventListener(EVENT_ESTIMATE_UPDATED, onEstimateUpdated)
@@ -721,12 +744,16 @@
   eventTarget.addEventListener(EVENT_FILTER_RESULT_CHANGED, onFilterResultUpdated)
   eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_CHANGED, onHideNonMatchesUpdated)
   eventTarget.addEventListener(EVENT_SORTER_CHANGED, onSorterChanged)
+  eventTarget.addEventListener(EVENT_DISPLAY_ESTIMATES_CHANGED, onDisplayEstimatesChanged)
+  eventTarget.addEventListener(EVENT_HIDE_REASONS_CHANGED, onHideReasonsChanged)
 
   // Observe the jailed user list for changes
   const listObserverConfig = { childList: true, subtree: true }
   const listObserver = new MutationObserver(listMutationCallback)
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
+
+  // Intercept network requests to get all bailed users
 
   // TODO docs
   function loadSettings() {
@@ -783,10 +810,14 @@
       .filter(mutation => mutation.type === 'childList')
       .flatMap(mutation => Array.from(mutation.addedNodes))
       .filter(node => node instanceof Element && node.parentNode instanceof Element)
-      .filter(node => !('bbExtracted' in node.dataset))
+      .filter(node => !('bbId' in node.dataset))
       .filter(element => element.parentNode.classList.contains('user-info-list-wrap'))
       bailElements.forEach(element => {
+        // Extract the user data & handle estimate element
         const userData = extractUserData(element)
+        if (userData == null) {
+          return
+        }
         element.dataset.bbId = userData.id
         bailData[userData.id] = userData
         updateEstimate(userData)
@@ -810,14 +841,23 @@
     }
   }
 
+  function getEstimateSpan(userData) {
+    return userData.bailElement.querySelector('.info-wrap .reason .bb-estimate-span')
+  }
+
+  function getReasonElement(bailElement) {
+    return bailElement.querySelector('.info-wrap .reason')
+  }
+
   function updateEstimateSpan(userData) {
     // Find the estimate element
-    let estimateElement = userData.bailElement.querySelector('.info-wrap .reason .bb-estimate-span')
+    let estimateElement = getEstimateSpan(userData)
 
     // Create the reason element if not done
     if (estimateElement == null) {
       estimateElement = createEstimateSpanElement(userData.estimateString)
-      const reasonElement = userData.bailElement.querySelector('.info-wrap .reason')
+      updateEstimateVisibility(estimateElement)
+      const reasonElement = getReasonElement(userData.bailElement)
       reasonElement.appendChild(document.createElement('br'))
       reasonElement.appendChild(estimateElement)
     }
@@ -865,6 +905,10 @@
   function extractUserData(bailElement) {
     // User ID & name
     const userNameElement = bailElement.querySelector('.user.name')
+    if (userNameElement == null || userNameElement.href == null) {
+      return null
+    }
+
     const id = userNameElement.href.split('=')[1]
     const name = userNameElement.title.split('[')[0].trim()
 
@@ -883,21 +927,20 @@
     const offline = userOnlineStatus.title.includes('Offline')
     const idle = userOnlineStatus.title.includes('Idle')
 
-    const userData = {
+    // Reason
+    const reason = getReasonElement(bailElement).textContent.trim()
+
+    return {
       id: id,
       name: name,
       minutes: minutes,
       level: level,
       bailElement: bailElement,
-      originalOrder: [...bailElement.parentElement.children].indexOf(bailElement),
       online: online,
       offline: offline,
       idle: idle,
+      reason: reason,
     }
-
-    bailElement.dataset.bbExtracted = "true"
-
-    return userData
   }
 
   /**
@@ -1130,10 +1173,8 @@
 
   function setSorter(sorterId) {
     if (settings.sorter === sorterId) {
-      GM_log("SKIP setSorter")
       return
     }
-    GM_log("SET SORTER")
     settings.sorter = sorterId
     eventTarget.dispatchEvent(new CustomEvent(EVENT_SORTER_CHANGED))
     saveSettings()
@@ -1143,17 +1184,9 @@
     const sorter = SORTERS[settings.sorter == null ? DEFAULT_TORN_SORTER : settings.sorter]
     const bailList = document.querySelector('.user-info-list-wrap')
 
-    // const arr = Array.from(bailList.children)
-    // GM_log("sortBailList size = " + arr.length)
-    // arr.sort(sorter.sorterFunction)
-    //
-    // for (const element in arr) {
-    //   GM_log("Append: " + element.)
-    //   bailList.appendChild(element)
-    // }
-
     Array.from(bailList.children)
       .map(element => bailData[element.dataset.bbId])
+      .filter(userData => userData != null && userData.bailElement != null)
       .sort(sorter.sorterFunction)
       .forEach(userData => bailList.appendChild(userData.bailElement))
   }
@@ -1170,6 +1203,73 @@
 
   function sanitizeCurrencyInput(inputElement) {
     inputElement.value = inputElement.value.replace(REGEX_NON_NUMBER, '')
+  }
+
+  function setEstimateVisibility(value) {
+    if (settings.displayEstimates === value) {
+      return
+    }
+    settings.displayEstimates = value
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_DISPLAY_ESTIMATES_CHANGED))
+    saveSettings()
+  }
+
+
+  function setHideReasons(value) {
+    if (settings.hideReasons === value) {
+      return
+    }
+    settings.hideReasons = value
+    eventTarget.dispatchEvent(new CustomEvent(EVENT_HIDE_REASONS_CHANGED))
+    saveSettings()
+  }
+
+
+  function updateAllEstimateVisibilities() {
+    for (const userData of Object.values(bailData)) {
+      const estimateSpan = getEstimateSpan(userData)
+      if (estimateSpan != null) {
+        updateEstimateVisibility(estimateSpan)
+      }
+    }
+  }
+
+  function updateEstimateVisibility(estimateSpan) {
+    estimateSpan.style.display = settings.displayEstimates ? 'inline-block' : 'none'
+  }
+
+  function updateAllReasonVisibilities() {
+    Object.values(bailData).forEach(updateReasonVisibility)
+  }
+
+  function updateReasonVisibility(userData) {
+    const reasonElement = getReasonElement(userData.bailElement)
+    reasonElement.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) { // Hide the reason
+        node.textContent = settings.hideReasons ?  '' : userData.reason
+      }
+      else if (node.nodeName === 'A' || node.nodeName === 'BR') { // Hide any player name links in the reason
+        node.style.display = settings.hideReasons ? 'none' : 'inline'
+      }
+    })
+  }
+
+
+  function updateReasonTitle() {
+    // Determine title
+    let title = ""
+    if (!settings.hideReasons && settings.displayEstimates) {
+      title = "Reason & Estimate"
+    }
+    else if (settings.displayEstimates) {
+      title = "Estimate"
+    }
+    else if (!settings.hideReasons) {
+      title = "Reason"
+    }
+
+    // Modify the reason to include/exclude estimate
+    document.querySelector('.reason.title-divider.divider-spiky').textContent = title
   }
 
   // EVENT HANDLERS
@@ -1196,8 +1296,17 @@
   }
 
   function onSorterChanged() {
-    GM_log("SORT BAIL LIST")
     sortBailList()
+  }
+
+  function onDisplayEstimatesChanged() {
+    updateAllEstimateVisibilities()
+    updateReasonTitle()
+  }
+
+  function onHideReasonsChanged() {
+    updateAllReasonVisibilities()
+    updateReasonTitle()
   }
 
 })()
