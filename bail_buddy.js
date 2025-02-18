@@ -6,6 +6,7 @@
 // @author     neth [3564828]
 // @match    https://www.torn.com/jailview.php
 // @icon     https://www.google.com/s2/favicons?sz=64&domain=torn.com
+// @run-at   document-start
 // @grant    GM_setValue
 // @grant    GM_getValue
 // @grant    GM.setValue
@@ -63,8 +64,6 @@
   const EVENT_FILTER_RESULT_CHANGED = 'bb-filter-result-changed'
   const EVENT_HIDE_NON_MATCHES_CHANGED = 'bb-hide-non-matches-changed'
   const EVENT_SORTER_CHANGED = 'bb-sorter-changed'
-  const EVENT_DISPLAY_ESTIMATES_CHANGED = 'bb-display-estimates-changed'
-  const EVENT_HIDE_REASONS_CHANGED = 'bb-hide-reasons-changed'
 
   const REGEX_NON_NUMBER = /[^0-9.]/g
   const REGEX_TIME = /(?:(\d+)h )?(\d+)m/
@@ -92,7 +91,7 @@
       displayName: 'Law Firm Job',
       category: 'Job',
       amount: .5,
-      discountChecker: (response) => response.job.company_type === 2 ,
+      discountChecker: (response) => response.job.company_type === 2,
     },
   }
 
@@ -197,6 +196,48 @@
     maximumFractionDigits: 0,
   })
 
+  /**
+   * Configurations of miscellaneous settings whose values are boolean.
+   *
+   * Each property in this object represents a toggle setting with the following structure:
+   *
+   * @typedef {Object} ToggleSetting
+   * @property {boolean} defaultValue - The initial value of the toggle when no setting exists in storage.
+   * @property {function(boolean):void} onChanged - Callback function invoked when the toggle state changes, parameter of type boolean.
+   * @property {string} labelText - The label displayed for the checkbox in the UI.
+   *
+   * @type {Object.<string, ToggleSetting>}
+   */
+  const MISC_TOGGLE_SETTINGS = {
+    displayEstimates: {
+      defaultValue: true,
+      onChanged: setEstimateVisibility,
+      labelText: 'Display Estimates',
+      description: `Displays bail estimates in the reason column.`,
+    },
+    hideReasons: {
+      defaultValue: false,
+      onChanged: setHideReasons,
+      labelText: 'Hide Reasons',
+      description: `Hides the reason a user was jailed.`,
+    },
+    disablePagination: {
+      defaultValue: false,
+      onChanged: (checked) => {
+      }, // TODO
+      labelText: 'Disable Pages',
+      description: `When checked, the list of jailed users is not paginated, instead ALL jailed users are displayed on
+      one page. This is useful as Torn limits the displayed users to 50 per page so it makes bail & bust sniping more difficult
+      when there are more than 50 jailed users. Could cause performance issues if there are 100s in jail, but that is <strong>rare</strong>.`,
+    },
+  }
+
+  const miscTooltipTextParts = Object.values(MISC_TOGGLE_SETTINGS).map(setting =>
+    `<strong>${setting.labelText}</strong> - ${setting.description}`
+  )
+  const MISC_TOOLTIP_TEXT = miscTooltipTextParts.join('<br><br>')
+
+
   const DEFAULT_SETTINGS = {
     settingsVersion: 1.02,
     rootCollapsed: false,
@@ -213,9 +254,11 @@
       hideOfflinePlayers: false,
     },
     sorter: DEFAULT_TORN_SORTER,
-    disablePagination: true,
-    displayEstimates: true,
-    hideReasons: false,
+  }
+
+  // Assign default setting values for misc toggle settings
+  for (const [key, setting] of Object.entries(MISC_TOGGLE_SETTINGS)) {
+    DEFAULT_SETTINGS[key] = setting.defaultValue
   }
 
   // Load & sanitize the settings
@@ -481,7 +524,7 @@
   for (const filter of Object.values(FILTERS)) {
     filtersTooltipText += `<strong>${filter.displayName}</strong> - ${filter.description}<br><br>`
   }
-  
+
   document.head.appendChild(style)
 
   const rootContainer = document.createElement('div')
@@ -541,26 +584,13 @@
           </div>
           <select name="bb-sort" id="bb-sort-select" class="bb-select"></select>
         </div class="bb-flex-column bb-flex-gap4">
-        <div class="bb-flex-column bb-flex-gap4">
+        <div id="bb-misc-settings-container" class="bb-flex-column bb-flex-gap4">
           <div class="bb-inline-flex-row bb-flex-gap4">
             <span class="bb-settings-label">Misc.</span>
             <span class="bb-tooltip-trigger" data-tooltip-id="misc-settings"></span>
             <div class="bb-tooltip-popup" data-tooltip-id="misc-settings">
-              <strong>Disable Pages</strong> - Disables the pagination of the baillist. This ensures that all jailed users
-              are present on this page.
+              ${MISC_TOOLTIP_TEXT}
             </div>
-          </div>
-          <div class="bb-inline-flex-row bb-flex-gap4">
-              <input id="bb-display-bail-estimates-checkbox" type="checkbox" ${settings.displayEstimates ? "checked" : ""} />
-              <label for="bb-display-bail-estimates-checkbox">Display Estimates</label> 
-          </div>
-          <div class="bb-inline-flex-row bb-flex-gap4">
-              <input id="bb-hide-reasons-checkbox" type="checkbox" ${settings.hideReasons ? "checked" : ""} />
-              <label for="bb-hide-reasons-checkbox">Hide Reasons</label> 
-          </div>
-          <div class="bb-inline-flex-row bb-flex-gap4">
-              <input id="bb-disable-pagination-checkbox" type="checkbox" ${settings.disablePagination ? "checked" : ""} />
-              <label for="bb-disable-pagination-checkbox">Disable Pages</label> 
           </div>
         </div>
       </div>
@@ -570,6 +600,35 @@
 
   const eventTarget = new EventTarget()
   const bailData = {}
+
+
+  // Intercept network requests to get all bailed users
+  // TODO
+  GM_log("BEGIN INTERCEPT XMLHTTP")
+  const requestUrl = "/jailview.php?"
+  const originalOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+    this._interceptedData = null;
+    if (method === "POST" && url.startsWith(requestUrl)) {
+      this._interceptedData = { method, url }
+      GM_log("[BB] XHR OPEN INTERCEPT: " + method + " " + url + " " + async + " " + user + " " + password);
+    }
+    return originalOpen.apply(this, arguments);
+  };
+
+  const originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function(data) {
+    if (!this._interceptedData) {
+      return originalSend.apply(this, arguments);
+    }
+    GM_log("[BB] XHR SEND INTERCEPT: " + this._interceptedData.method + " " + this._interceptedData.url);
+    GM_log("DATA:" + JSON.stringify(data))
+    return originalSend.apply(this, arguments);
+  }
+
+  GM_log("END INTERCEPT XMLHTTP")
+
+  return
 
   // Add root to DOM
   const userListWrapperElement = document.querySelector('.userlist-wrapper')
@@ -667,8 +726,7 @@
     const response = await validateAPIKey(settings.apiKey)
     if (response === "OK") {
       displayValidateResponseText('Bail Discounts Updated!', 'var(--default-green-color)')
-    }
-    else {
+    } else {
       displayValidateResponseText(`Error: ${response.message}`, 'var(--default-red-color)')
     }
     apiKeyValidateButton.disabled = false
@@ -762,15 +820,28 @@
   bbSortSelectElement.addEventListener('change', () => setSorter(bbSortSelectElement.value))
 
   // Misc Settings
-  const displayBailEstimatesCheckbox = document.getElementById('bb-display-bail-estimates-checkbox')
-  displayBailEstimatesCheckbox.addEventListener('change', () => {
-    setEstimateVisibility(displayBailEstimatesCheckbox.checked)
-  })
+  const miscSettingsContainer = document.getElementById('bb-misc-settings-container')
+  for (const [settingKey, miscSetting] of Object.entries(MISC_TOGGLE_SETTINGS)) {
+    const settingDiv = document.createElement('div')
+    settingDiv.classList.add('bb-inline-flex-row', 'bb-flex-gap4')
+    const settingCheckbox = document.createElement('input')
+    settingCheckbox.classList.add('bb-checkbox')
+    settingCheckbox.id = `bb-${settingKey}`
+    settingCheckbox.type = 'checkbox'
+    settingCheckbox.checked = settings[settingKey]
 
-  const hideReasonsCheckbox = document.getElementById('bb-hide-reasons-checkbox')
-  hideReasonsCheckbox.addEventListener('change', () => {
-    setHideReasons(hideReasonsCheckbox.checked)
-  })
+    const settingLabel = document.createElement('label')
+    settingLabel.htmlFor = settingCheckbox.id
+    settingLabel.textContent = miscSetting.labelText
+
+    settingDiv.appendChild(settingCheckbox)
+    settingDiv.appendChild(settingLabel)
+
+    miscSettingsContainer.appendChild(settingDiv)
+
+    // noinspection JSValidateTypes
+    settingDiv.addEventListener('change', () => miscSetting.onChanged(settingCheckbox.checked))
+  }
 
   // Update reason title
   updateReasonTitle()
@@ -782,16 +853,12 @@
   eventTarget.addEventListener(EVENT_FILTER_RESULT_CHANGED, onFilterResultUpdated)
   eventTarget.addEventListener(EVENT_HIDE_NON_MATCHES_CHANGED, onHideNonMatchesUpdated)
   eventTarget.addEventListener(EVENT_SORTER_CHANGED, onSorterChanged)
-  eventTarget.addEventListener(EVENT_DISPLAY_ESTIMATES_CHANGED, onDisplayEstimatesChanged)
-  eventTarget.addEventListener(EVENT_HIDE_REASONS_CHANGED, onHideReasonsChanged)
 
   // Observe the jailed user list for changes
-  const listObserverConfig = { childList: true, subtree: true }
+  const listObserverConfig = {childList: true, subtree: true}
   const listObserver = new MutationObserver(listMutationCallback)
   const listNode = document.querySelector('.user-info-list-wrap')
   listObserver.observe(listNode, listObserverConfig)
-
-  // Intercept network requests to get all bailed users
 
   // TODO docs
   function loadSettings() {
@@ -850,21 +917,21 @@
       .filter(node => node instanceof Element && node.parentNode instanceof Element)
       .filter(node => !('bbId' in node.dataset))
       .filter(element => element.parentNode.classList.contains('user-info-list-wrap'))
-      bailElements.forEach(element => {
-        // Extract the user data & handle estimate element
-        const userData = extractUserData(element)
-        if (userData == null) {
-          return
-        }
-        element.dataset.bbId = userData.id
-        bailData[userData.id] = userData
-        updateEstimate(userData)
-        updateReasonVisibility(userData)
-      });
-
-      if (bailElements.length > 0 && settings.sorter !== DEFAULT_TORN_SORTER) {
-        sortBailList()
+    bailElements.forEach(element => {
+      // Extract the user data & handle estimate element
+      const userData = extractUserData(element)
+      if (userData == null) {
+        return
       }
+      element.dataset.bbId = userData.id
+      bailData[userData.id] = userData
+      updateEstimate(userData)
+      updateReasonVisibility(userData)
+    });
+
+    if (bailElements.length > 0 && settings.sorter !== DEFAULT_TORN_SORTER) {
+      sortBailList()
+    }
   }
 
   function updateAllEstimates() {
@@ -876,7 +943,7 @@
     userData.estimate = calculateEstimate(userData.level, userData.minutes)
     if (prevEstimate !== userData.estimate || userData.estimateString === undefined) {
       userData.estimateString = formatEstimate(userData.estimate)
-      eventTarget.dispatchEvent(new CustomEvent(EVENT_ESTIMATE_UPDATED, { detail: { userData: userData } }))
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_ESTIMATE_UPDATED, {detail: {userData: userData}}))
     }
   }
 
@@ -922,7 +989,7 @@
       }
     }
     if (lastResult !== userData.filterResult) {
-      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_CHANGED, { detail: { userData: userData } }))
+      eventTarget.dispatchEvent(new CustomEvent(EVENT_FILTER_RESULT_CHANGED, {detail: {userData: userData}}))
     }
   }
 
@@ -1059,14 +1126,13 @@
       saveSettings: true,
       emitEvent: true,
     }
-    options = { ...defaultOptions, ...options }
+    options = {...defaultOptions, ...options}
 
 
     // Set in settings
     if (hasDiscount) {
       settings.discounts[discountId] = true
-    }
-    else {
+    } else {
       delete settings.discounts[discountId]
     }
 
@@ -1090,7 +1156,7 @@
 
   function setBailFilter(filterId, filterValue) {
     const currentValue = settings.bailFilter[filterId]
-    GM_log("SET BAIL FILTER: filterId=" + filterId +", filterValue=" + filterValue)
+    GM_log("SET BAIL FILTER: filterId=" + filterId + ", filterValue=" + filterValue)
     if (currentValue === filterValue) {
       GM_log("SKIP BAIL FILTER")
       return
@@ -1117,14 +1183,14 @@
         },
       })
 
-      const json =  await response.json()
+      const json = await response.json()
       if ("error" in json) {
         return new Error(json.error.error)
       }
 
       let discountsChanged = false
       for (const [discountId, discount] of Object.entries(DISCOUNTS)) {
-        discountsChanged = setBailDiscount(discountId, discount.discountChecker(json),  {
+        discountsChanged = setBailDiscount(discountId, discount.discountChecker(json), {
           saveSettings: false,
           emitEvent: false,
         }) || discountsChanged
@@ -1136,8 +1202,7 @@
       }
 
       return "OK"
-    }
-    catch (error) {
+    } catch (error) {
       return error
     }
   }
@@ -1167,7 +1232,7 @@
    * @param {HTMLElement} responseElement - The DOM element containing the API Key validation response.
    * @return {void}
    */
-  function clearValidateResponseText(responseElement){
+  function clearValidateResponseText(responseElement) {
     if (responseElement.hasAttribute('timeout-id')) {
       const existingTimeoutId = responseElement.getAttribute('timeout-id')
       clearTimeout(parseInt(existingTimeoutId))
@@ -1191,8 +1256,7 @@
       contentContainer.classList.add('bb-collapsed')
       contentDivider.classList.add('bb-collapsed')
       delete rootToggleButton.dataset.expanded
-    }
-    else {
+    } else {
       contentContainer.classList.remove('bb-collapsed')
       contentDivider.classList.remove('bb-collapsed')
       rootToggleButton.dataset.expanded = 'true'
@@ -1254,20 +1318,20 @@
       return
     }
     settings.displayEstimates = value
-    eventTarget.dispatchEvent(new CustomEvent(EVENT_DISPLAY_ESTIMATES_CHANGED))
+    updateAllEstimateVisibilities()
+    updateReasonTitle()
     saveSettings()
   }
-
 
   function setHideReasons(value) {
     if (settings.hideReasons === value) {
       return
     }
     settings.hideReasons = value
-    eventTarget.dispatchEvent(new CustomEvent(EVENT_HIDE_REASONS_CHANGED))
+    updateAllReasonVisibilities()
+    updateReasonTitle()
     saveSettings()
   }
-
 
   function updateAllEstimateVisibilities() {
     for (const userData of Object.values(bailData)) {
@@ -1291,10 +1355,9 @@
     let reasonPart = 0
     for (const childNode of Array.from(reasonElement.childNodes)) {
       if (childNode.nodeType === Node.TEXT_NODE) { // Hide the reason
-        childNode.textContent = settings.hideReasons ?  '' : userData.reasonParts[reasonPart]
+        childNode.textContent = settings.hideReasons ? '' : userData.reasonParts[reasonPart]
         reasonPart++
-      }
-      else if (childNode.nodeName === 'A' || childNode.nodeName === 'BR') { // Hide any player name links in the reason
+      } else if (childNode.nodeName === 'A' || childNode.nodeName === 'BR') { // Hide any player name links in the reason
         childNode.style.display = settings.hideReasons ? 'none' : 'inline'
       }
     }
@@ -1306,11 +1369,9 @@
     let title = ""
     if (!settings.hideReasons && settings.displayEstimates) {
       title = "Reason & Estimate"
-    }
-    else if (settings.displayEstimates) {
+    } else if (settings.displayEstimates) {
       title = "Estimate"
-    }
-    else if (!settings.hideReasons) {
+    } else if (!settings.hideReasons) {
       title = "Reason"
     }
 
@@ -1343,16 +1404,6 @@
 
   function onSorterChanged() {
     sortBailList()
-  }
-
-  function onDisplayEstimatesChanged() {
-    updateAllEstimateVisibilities()
-    updateReasonTitle()
-  }
-
-  function onHideReasonsChanged() {
-    updateAllReasonVisibilities()
-    updateReasonTitle()
   }
 
 })()
