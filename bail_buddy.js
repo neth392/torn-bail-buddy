@@ -228,7 +228,7 @@
       labelText: 'Disable Pages',
       description: `When checked, the list of jailed users is not paginated, instead ALL jailed users are displayed on
       one page. This is useful as Torn limits the displayed users to 50 per page so it makes bail & bust sniping more difficult
-      when there are more than 50 jailed users. Could cause performance issues if there are 100s in jail, but that is <strong>rare</strong>.`,
+      when there are more than 50 jailed users. Requires a reload of the page to take effect.`,
     },
   }
 
