@@ -610,19 +610,61 @@
   XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
     this._interceptedData = null;
     if (method === "POST" && url.startsWith(requestUrl)) {
-      this._interceptedData = { method, url }
+      this._interceptedData = { method, url, headers: {}, }
       GM_log("[BB] XHR OPEN INTERCEPT: " + method + " " + url + " " + async + " " + user + " " + password);
     }
     return originalOpen.apply(this, arguments);
   };
 
-  const originalSend = XMLHttpRequest.prototype.send;
+  const createXhrData = (start) => `action=${encodeURIComponent('jail')}&start=${encodeURIComponent(start)}`
+
+  const originalSend = XMLHttpRequest.prototype.send
+
   XMLHttpRequest.prototype.send = function(data) {
     if (!this._interceptedData) {
       return originalSend.apply(this, arguments);
     }
-    GM_log("[BB] XHR SEND INTERCEPT: " + this._interceptedData.method + " " + this._interceptedData.url);
-    GM_log("DATA:" + JSON.stringify(data))
+    GM_log("[BB] XHR SEND INTERCEPT: " + this._interceptedData.method + " " + this._interceptedData.url)
+    GM_log("[BB] ORIGINAL DATA=" + JSON.stringify(data))
+
+
+    const originalXhr = this
+
+    const response = {}
+
+    const closeOriginalRequest = () => {
+      // TODO
+    }
+
+    const executeRequest = (start) => {
+      const newXhr = new XMLHttpRequest()
+
+      const originalRfcv = originalXhr._interceptedData.url.split("=")[2]
+      const newUrl = `/jailview.php?${new Date().getTime()}=${Math.random()}&rfcv=${originalRfcv}`
+      GM_log("[BB] NEW URL=" + newUrl)
+
+      const newData = createXhrData(start)
+      GM_log("[BB] NEW DATA=" + newData)
+
+      originalOpen.apply(newXhr, [ "POST", originalXhr._interceptedData.url, true ])
+      newXhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+      newXhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+
+      newXhr.onreadystatechange = function() {
+        if (newXhr.readyState === 4 && newXhr.status === 200) {
+          GM_log("[BB] Custom XHR Response Text:\n" + JSON.stringify(newXhr.response));
+        }
+      }
+
+      originalSend.apply(newXhr, [ newData ])
+    }
+
+    executeRequest(50)
+
+    // Object.defineProperty(this, "responseText", { get: () => newXhr.responseText });
+    // Object.defineProperty(this, "status", { get: () => 200 });
+    // Object.defineProperty(this, "readyState", { get: () => 4 });
+
     return originalSend.apply(this, arguments);
   }
 
